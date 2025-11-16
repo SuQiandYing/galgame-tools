@@ -8,7 +8,8 @@ import threading
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QPushButton, QLabel, QFileDialog,
                              QTextEdit, QProgressBar, QFrame, QLineEdit,
-                             QGraphicsDropShadowEffect, QStackedWidget, QMessageBox, QComboBox)
+                             QGraphicsDropShadowEffect, QStackedWidget, QMessageBox, QComboBox,
+                             QCheckBox)
 from PyQt6.QtCore import (Qt, QThread, pyqtSignal, QPropertyAnimation, QEasingCurve, 
                           QPoint, QRectF, QUrl, QSettings, QSize, pyqtProperty)
 from PyQt6.QtGui import (QFont, QColor, QPainter, QPainterPath, QDragEnterEvent, 
@@ -231,16 +232,18 @@ class GameEngine:
             prog_cb(100); log_cb(f"🎉 封包完成！已生成加密文件:\n- {dst_path}.en\n- {ofp_path}.en")
         finally: src.close(); fin.close(); fp.close(); dfp.close(); dst.close() if not dst.closed else None; ofp.close() if not ofp.closed else None
 
-    # ========================================================================
-    # Corrected script generation logic
-    # ========================================================================
-    def action_format_script(self, text_file, log_cb, prog_cb):
+    def action_format_script(self, text_file, log_cb, prog_cb, dialogue_starters):
         if not os.path.exists(text_file): raise FileNotFoundError("text.txt 不存在，请先执行提取操作。")
         out_file = text_file.replace('text.txt', 'scenario.txt')
         name_file = text_file.replace('text.txt', 'names.txt')
         
         limit_end = self.ENDPOSITION if self.ENDPOSITION > 0 else float('inf')
         log_cb(f"📖 正在生成脚本文件... 范围: {self.STARTPOSITION} 到 {'无限制' if limit_end == float('inf') else limit_end}")
+
+        if not dialogue_starters:
+            log_cb("⚠️ 警告: 未选择任何对话起始符，将不会合并人名和对话。")
+        
+        starters_tuple = tuple(dialogue_starters)
         
         with open(text_file, 'r', encoding='utf-16') as f: content = f.read()
         blocks = content.split('\n\n'); lines_data = []
@@ -259,19 +262,18 @@ class GameEngine:
         while i < total:
             prog_cb(int((i/total)*100))
             curr = lines_data[i]; txt = curr['text']
-            if i + 1 < total:
+            
+            if starters_tuple and i + 1 < total:
                 nxt = lines_data[i+1]; nxt_txt = nxt['text']
-                # Mode 0: Name is on the next line -> [Dialogue] [Name]
                 if self.name_mode == 0:
-                    if (txt.startswith('「') or txt.startswith('『') or txt.startswith('（')or txt.startswith('<')) and is_name(nxt_txt):
+                    if txt.startswith(starters_tuple) and is_name(nxt_txt):
                         names_set.add(nxt_txt)
-                        final_script.append(f"{nxt_txt}{txt}")
+                        final_script.append(f"{nxt_txt}\t{txt}")
                         i += 2; continue
-                # Mode 1: Name is on the previous line -> [Name] [Dialogue]
                 else: 
-                    if is_name(txt) and (nxt_txt.startswith('「') or nxt_txt.startswith('『') or nxt_txt.startswith('（')or nxt_txt.startswith('<')):
+                    if is_name(txt) and nxt_txt.startswith(starters_tuple):
                         names_set.add(txt)
-                        final_script.append(f"{txt}{nxt_txt}")
+                        final_script.append(f"{txt}\t{nxt_txt}")
                         i += 2; continue
             final_script.append(txt); i += 1
             
@@ -312,10 +314,10 @@ class GameEngine:
                 idx1, idx2 = indices[l_ptr], indices[l_ptr+1]
                 h1, h2 = lines[idx1].split('●')[1], lines[idx2].split('●')[1]
                 
-                if self.name_mode == 0: # Original order: [Dialogue] [Name]
+                if self.name_mode == 0:
                     lines[idx1] = f"●{h1}●{dialog}\n"
                     lines[idx2] = f"●{h2}●{name}\n"
-                else: # Original order: [Name] [Dialogue]
+                else:
                     lines[idx1] = f"●{h1}●{name}\n"
                     lines[idx2] = f"●{h2}●{dialog}\n"
                 l_ptr += 2
@@ -331,167 +333,100 @@ class GameEngine:
 
 class Worker(QThread):
     log = pyqtSignal(str); prog = pyqtSignal(int); done = pyqtSignal(str); err = pyqtSignal(str)
-    def __init__(self, engine, mode, start, end_line, name_mode, extra_arg=None, encoding='cp936'):
+    def __init__(self, engine, mode, start, end_line, name_mode, extra_arg=None, encoding='cp936', dialogue_starters=()):
         super().__init__()
         self.e = engine; self.m = mode
         self.e.STARTPOSITION = int(start)
         self.e.ENDPOSITION = int(end_line)
         self.e.name_mode = name_mode; self.arg = extra_arg; self.e.encoding_write = encoding
+        self.dialogue_starters = dialogue_starters
+
     def run(self):
         try:
             res = ""
             if self.m == 'find': self.e.try_find_start_position(self.log.emit)
             elif self.m == 'dump': res = self.e.action_dump(self.log.emit, self.prog.emit)
             elif self.m == 'pack': res = self.e.action_pack(self.log.emit, self.prog.emit)
-            elif self.m == 'format': res = self.e.action_format_script(self.arg, self.log.emit, self.prog.emit)
+            elif self.m == 'format': res = self.e.action_format_script(self.arg, self.log.emit, self.prog.emit, self.dialogue_starters)
             elif self.m == 'import': res = self.e.action_import_scenario(self.arg, self.log.emit, self.prog.emit)
             self.done.emit(str(res))
         except Exception as e: self.err.emit(str(e))
 
 class NiflheimApp(QMainWindow):
-    # This section for resizing frameless window is kept from your original code
-    EDGE_NONE   = 0
-    EDGE_LEFT   = 1
-    EDGE_TOP    = 2
-    EDGE_RIGHT  = 4
-    EDGE_BOTTOM = 8
-    EDGE_MARGIN = 6
+    EDGE_NONE   = 0; EDGE_LEFT   = 1; EDGE_TOP    = 2
+    EDGE_RIGHT  = 4; EDGE_BOTTOM = 8; EDGE_MARGIN = 6
 
     def __init__(self):
         super().__init__()
-        self.engine = GameEngine()
-        self.settings = QSettings("SoftPalWorkshop", "NiflheimApp")
-        
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMouseTracking(True) 
-        
-        self.resize(1000, 720)
-        self.setMinimumSize(800, 600)
-        
-        self.is_dragging = False 
-        self.is_resizing = False
-        self.resize_edge = self.EDGE_NONE
-        self.drag_start_pos = QPoint()
-        self.old_geometry = QRectF()
-
-        self.setup_ui()
-        self.setAcceptDrops(True)
-        self.is_max = False
-        self.load_settings()
-        
-        self.centralWidget().setMouseTracking(True)
+        self.engine = GameEngine(); self.settings = QSettings("SoftPalWorkshop", "NiflheimApp")
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint); self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMouseTracking(True); self.resize(1000, 720); self.setMinimumSize(800, 600)
+        self.is_dragging = False; self.is_resizing = False; self.resize_edge = self.EDGE_NONE
+        self.drag_start_pos = QPoint(); self.old_geometry = QRectF()
+        self.setup_ui(); self.setAcceptDrops(True); self.is_max = False
+        self.load_settings(); self.centralWidget().setMouseTracking(True)
 
     def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter = QPainter(self); painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         gradient = QLinearGradient(0, 0, self.width(), self.height())
-        gradient.setColorAt(0.0, QColor("#F2F6FF"))
-        gradient.setColorAt(0.6, QColor("#EAD6EE"))
-        gradient.setColorAt(1.0, QColor("#E3F2FD"))
-        
-        path = QPainterPath()
-        path.addRoundedRect(QRectF(self.rect()), 24, 24)
-        painter.fillPath(path, gradient)
-        
-        pen = QPen(QColor(0, 0, 0, 20))
-        pen.setWidth(1)
-        painter.strokePath(path, pen)
+        gradient.setColorAt(0.0, QColor("#F2F6FF")); gradient.setColorAt(0.6, QColor("#EAD6EE")); gradient.setColorAt(1.0, QColor("#E3F2FD"))
+        path = QPainterPath(); path.addRoundedRect(QRectF(self.rect()), 24, 24); painter.fillPath(path, gradient)
+        pen = QPen(QColor(0, 0, 0, 20)); pen.setWidth(1); painter.strokePath(path, pen)
 
     def setup_ui(self):
-        central = QWidget(); self.setCentralWidget(central)
-        central.setMouseTracking(True) 
-        
-        main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(20, 20, 20, 20)
-        main_layout.setSpacing(15)
-
-        title_bar = QHBoxLayout()
-        title_label = QLabel("SoftPal引擎脚本处理工具"); title_label.setFont(QFont("Microsoft YaHei", 12, QFont.Weight.Bold)); title_label.setStyleSheet("color: #333; padding-left: 10px;")
-        btn_min = AnimButton("min", self.showMinimized, self)
-        btn_max = AnimButton("max", self.toggle_max, self)
-        btn_close = AnimButton("close", self.close, self)
-        title_bar.addWidget(title_label); title_bar.addStretch(); title_bar.addWidget(btn_min); title_bar.addWidget(btn_max); title_bar.addWidget(btn_close)
-        main_layout.addLayout(title_bar)
-
-        flow_card = QWidget()
-        flow_layout = QHBoxLayout(flow_card)
-        flow_lbl = QLabel("标准流程: ① 提取脚本  ➔  ② 处理脚本  ➔  ③ 翻译脚本  ➔  ④ 导入脚本  ➔  ⑤ 封包脚本")
-        flow_lbl.setStyleSheet("color: #007AFF; font-weight: bold; font-family: 'Microsoft YaHei'; background: rgba(255,255,255,0.5); padding: 8px; border-radius: 10px;")
-        flow_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        flow_layout.addWidget(flow_lbl)
-        main_layout.addWidget(flow_card)
-
+        central = QWidget(); self.setCentralWidget(central); central.setMouseTracking(True) 
+        main_layout = QVBoxLayout(central); main_layout.setContentsMargins(20, 20, 20, 20); main_layout.setSpacing(15)
+        title_bar = QHBoxLayout(); title_label = QLabel("SoftPal引擎脚本处理工具"); title_label.setFont(QFont("Microsoft YaHei", 12, QFont.Weight.Bold)); title_label.setStyleSheet("color: #333; padding-left: 10px;")
+        btn_min = AnimButton("min", self.showMinimized, self); btn_max = AnimButton("max", self.toggle_max, self); btn_close = AnimButton("close", self.close, self)
+        title_bar.addWidget(title_label); title_bar.addStretch(); title_bar.addWidget(btn_min); title_bar.addWidget(btn_max); title_bar.addWidget(btn_close); main_layout.addLayout(title_bar)
+        flow_card = QWidget(); flow_layout = QHBoxLayout(flow_card)
+        flow_lbl = QLabel("标准流程: ① 提取脚本  ➔  ② 处理脚本  ➔  ③ 翻译脚本  ➔  ④ 导入脚本  ➔  ⑤ 封包脚本"); flow_lbl.setStyleSheet("color: #007AFF; font-weight: bold; font-family: 'Microsoft YaHei'; background: rgba(255,255,255,0.5); padding: 8px; border-radius: 10px;"); flow_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        flow_layout.addWidget(flow_lbl); main_layout.addWidget(flow_card)
         content_layout = QHBoxLayout()
-        
         left_card = IOSCard(); left_layout = QVBoxLayout(left_card); left_layout.setContentsMargins(25, 25, 25, 25); left_layout.setSpacing(20)
-        left_layout.addWidget(self.create_label("文件设置"))
-        self.in_text = IOSInput("请拖入或选择 TEXT.DAT..."); self.in_script = IOSInput("请拖入或选择 SCRIPT.SRC...")
-        left_layout.addLayout(self.create_file_row(self.in_text)); left_layout.addLayout(self.create_file_row(self.in_script))
-        left_layout.addSpacing(10); left_layout.addWidget(self.create_label("高级参数"))
-        param_layout = QHBoxLayout()
-        
-        self.spin_start = IOSInput(""); self.spin_start.setPlaceholderText("起始ID")
-        self.spin_end = IOSInput(""); self.spin_end.setPlaceholderText("结束ID (0=全部)")
-        
-        btn_auto = IOSButton("自动分析指针", "#34C759"); btn_auto.clicked.connect(self.do_auto_find)
-        param_layout.addWidget(self.spin_start); param_layout.addWidget(self.spin_end); param_layout.addWidget(btn_auto)
-        left_layout.addLayout(param_layout)
-        help_label = QLabel("起始ID: 从指定的文本行号开始处理。\n结束ID: 生成脚本时的截止行号，0为不限制。")
-        help_label.setStyleSheet("color: #555; font-size: 11px;")
-        left_layout.addWidget(help_label)
-        enc_layout = QHBoxLayout()
-        enc_lbl = QLabel("封包编码:"); enc_lbl.setStyleSheet("font-weight:bold; color:#555; font-family:'Microsoft YaHei';")
-        self.combo_enc = QComboBox(); self.combo_enc.addItems(["cp936 (简体中文)", "cp932 (日文)", "Big5 (繁体中文)", "UTF-8"])
-        self.combo_enc.setStyleSheet("QComboBox { border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 5px 10px; background: rgba(255,255,255,0.5); color: #333; font-family: 'Microsoft YaHei'; }")
-        enc_layout.addWidget(enc_lbl); enc_layout.addWidget(self.combo_enc)
-        left_layout.addLayout(enc_layout); left_layout.addStretch()
-        btn_reset = IOSButton("重置所有设置", "#8E8E93"); btn_reset.clicked.connect(self.reset_all)
-        left_layout.addWidget(btn_reset)
-
+        left_layout.addWidget(self.create_label("文件设置")); self.in_text = IOSInput("请拖入或选择 TEXT.DAT..."); self.in_script = IOSInput("请拖入或选择 SCRIPT.SRC...")
+        left_layout.addLayout(self.create_file_row(self.in_text)); left_layout.addLayout(self.create_file_row(self.in_script)); left_layout.addSpacing(10); left_layout.addWidget(self.create_label("高级参数"))
+        param_layout = QHBoxLayout(); self.spin_start = IOSInput(""); self.spin_start.setPlaceholderText("起始ID"); self.spin_end = IOSInput(""); self.spin_end.setPlaceholderText("结束ID (0=全部)")
+        btn_auto = IOSButton("自动分析指针", "#34C759"); btn_auto.clicked.connect(self.do_auto_find); param_layout.addWidget(self.spin_start); param_layout.addWidget(self.spin_end); param_layout.addWidget(btn_auto); left_layout.addLayout(param_layout)
+        help_label = QLabel("起始ID: 从指定的文本行号开始处理。\n结束ID: 生成脚本时的截止行号，0为不限制。"); help_label.setStyleSheet("color: #555; font-size: 11px;"); left_layout.addWidget(help_label)
+        enc_layout = QHBoxLayout(); enc_lbl = QLabel("封包编码:"); enc_lbl.setStyleSheet("font-weight:bold; color:#555; font-family:'Microsoft YaHei';"); self.combo_enc = QComboBox(); self.combo_enc.addItems(["cp936 (简体中文)", "cp932 (日文)", "Big5 (繁体中文)", "UTF-8"])
+        self.combo_enc.setStyleSheet("QComboBox { border: 1px solid rgba(0,0,0,0.1); border-radius: 10px; padding: 5px 10px; background: rgba(255,255,255,0.5); color: #333; font-family: 'Microsoft YaHei'; }"); enc_layout.addWidget(enc_lbl); enc_layout.addWidget(self.combo_enc); left_layout.addLayout(enc_layout); left_layout.addStretch()
+        btn_reset = IOSButton("重置所有设置", "#8E8E93"); btn_reset.clicked.connect(self.reset_all); left_layout.addWidget(btn_reset)
         right_card = IOSCard(); right_layout = QVBoxLayout(right_card); right_layout.setContentsMargins(25, 25, 25, 25)
         self.stack = QStackedWidget()
         
-        v_dump = QWidget(); l_d = QVBoxLayout(v_dump)
-        lbl_d = QLabel("第一步：提取脚本"); lbl_d.setAlignment(Qt.AlignmentFlag.AlignCenter); lbl_d.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
-        btn_d = IOSButton("开始提取", "#007AFF"); btn_d.clicked.connect(self.do_dump)
-        l_d.addStretch(); l_d.addWidget(lbl_d); l_d.addWidget(btn_d); l_d.addStretch()
+        v_dump = QWidget(); l_d = QVBoxLayout(v_dump); lbl_d = QLabel("第一步：提取脚本"); lbl_d.setAlignment(Qt.AlignmentFlag.AlignCenter); lbl_d.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold)); btn_d = IOSButton("开始提取", "#007AFF"); btn_d.clicked.connect(self.do_dump); l_d.addStretch(); l_d.addWidget(lbl_d); l_d.addWidget(btn_d); l_d.addStretch()
         
         v_fmt = QWidget(); l_f = QVBoxLayout(v_fmt)
         lbl_f = QLabel("第二步：处理脚本"); lbl_f.setAlignment(Qt.AlignmentFlag.AlignCenter); lbl_f.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
-        self.combo_name_pos = QComboBox()
-        self.combo_name_pos.addItems(["👤 人名在对话下方", "👤 人名在对话上方"])
-        self.combo_name_pos.setStyleSheet(self.combo_enc.styleSheet())
-        btn_f_export = IOSButton("导出未译脚本", "#AF52DE"); btn_f_export.clicked.connect(self.do_format)
-        btn_f_import = IOSButton("导入已译脚本", "#FF9500"); btn_f_import.clicked.connect(self.do_import)
         desc_f = QLabel("将对话与人名合并为一行，便于翻译。\n请根据游戏原文结构选择正确的人名位置。"); desc_f.setAlignment(Qt.AlignmentFlag.AlignCenter); desc_f.setStyleSheet("color:#555")
-        l_f.addStretch(); l_f.addWidget(lbl_f); l_f.addWidget(desc_f); l_f.addWidget(self.combo_name_pos); l_f.addSpacing(10)
+        
+        quote_box = QWidget(); quote_layout = QHBoxLayout(quote_box); quote_layout.setContentsMargins(0,0,0,0)
+        quote_label = QLabel("对话起始符:")
+        self.chk_quote1 = QCheckBox("「"); self.chk_quote1.setChecked(True)
+        self.chk_quote2 = QCheckBox("『"); self.chk_quote2.setChecked(True)
+        self.chk_quote3 = QCheckBox("（"); self.chk_quote3.setChecked(True)
+        self.chk_quote4 = QCheckBox("<s"); self.chk_quote4.setChecked(True)
+        quote_layout.addWidget(quote_label); quote_layout.addStretch()
+        for chk in [self.chk_quote1, self.chk_quote2, self.chk_quote3, self.chk_quote4]:
+            quote_layout.addWidget(chk)
+        quote_layout.addStretch()
+
+        self.combo_name_pos = QComboBox(); self.combo_name_pos.addItems(["👤 人名在对话下方", "👤 人名在对话上方"]); self.combo_name_pos.setStyleSheet(self.combo_enc.styleSheet())
+        btn_f_export = IOSButton("导出未译脚本", "#AF52DE"); btn_f_export.clicked.connect(self.do_format); btn_f_import = IOSButton("导入已译脚本", "#FF9500"); btn_f_import.clicked.connect(self.do_import)
+        
+        l_f.addStretch(); l_f.addWidget(lbl_f); l_f.addWidget(desc_f); l_f.addSpacing(10)
+        l_f.addWidget(quote_box); l_f.addWidget(self.combo_name_pos); l_f.addSpacing(10)
         l_f.addWidget(btn_f_export); l_f.addSpacing(10); l_f.addWidget(btn_f_import); l_f.addStretch()
 
-        v_pack = QWidget(); l_p = QVBoxLayout(v_pack)
-        lbl_p = QLabel("第三步：封包脚本"); lbl_p.setAlignment(Qt.AlignmentFlag.AlignCenter); lbl_p.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold))
-        btn_p = IOSButton("封包加密", "#FF2D55"); btn_p.clicked.connect(self.do_pack)
-        l_p.addStretch(); l_p.addWidget(lbl_p); l_p.addWidget(btn_p); l_p.addStretch()
-
+        v_pack = QWidget(); l_p = QVBoxLayout(v_pack); lbl_p = QLabel("第三步：封包脚本"); lbl_p.setAlignment(Qt.AlignmentFlag.AlignCenter); lbl_p.setFont(QFont("Microsoft YaHei", 14, QFont.Weight.Bold)); btn_p = IOSButton("封包加密", "#FF2D55"); btn_p.clicked.connect(self.do_pack); l_p.addStretch(); l_p.addWidget(lbl_p); l_p.addWidget(btn_p); l_p.addStretch()
         self.stack.addWidget(v_dump); self.stack.addWidget(v_fmt); self.stack.addWidget(v_pack)
-
-        tab_container = QWidget(); tab_container.setStyleSheet("background: rgba(0,0,0,0.05); border-radius: 15px;")
-        tc_layout = QHBoxLayout(tab_container); tc_layout.setContentsMargins(5,5,5,5); tc_layout.setSpacing(5)
+        tab_container = QWidget(); tab_container.setStyleSheet("background: rgba(0,0,0,0.05); border-radius: 15px;"); tc_layout = QHBoxLayout(tab_container); tc_layout.setContentsMargins(5,5,5,5); tc_layout.setSpacing(5)
         self.btn_tab_d = QPushButton("1. 提取"); self.btn_tab_f = QPushButton("2. 脚本"); self.btn_tab_p = QPushButton("3. 封包")
         self.tabs = [self.btn_tab_d, self.btn_tab_f, self.btn_tab_p]
-        for i, b in enumerate(self.tabs):
-            b.setCheckable(True); b.setFixedSize(90, 30)
-            b.clicked.connect(lambda checked, idx=i: self.switch_tab(idx))
-            tc_layout.addWidget(b)
-        
-        right_layout.addWidget(tab_container, alignment=Qt.AlignmentFlag.AlignCenter)
-        right_layout.addWidget(self.stack)
-        self.log_area = IOSLog(); right_layout.addWidget(self.log_area)
-        self.progress = QProgressBar(); self.progress.setFixedHeight(6); self.progress.setTextVisible(False); right_layout.addWidget(self.progress)
-        self.switch_tab(0)
-
-        content_layout.addWidget(left_card, 45); content_layout.addWidget(right_card, 55)
-        main_layout.addLayout(content_layout)
+        for i, b in enumerate(self.tabs): b.setCheckable(True); b.setFixedSize(90, 30); b.clicked.connect(lambda checked, idx=i: self.switch_tab(idx)); tc_layout.addWidget(b)
+        right_layout.addWidget(tab_container, alignment=Qt.AlignmentFlag.AlignCenter); right_layout.addWidget(self.stack); self.log_area = IOSLog(); right_layout.addWidget(self.log_area); self.progress = QProgressBar(); self.progress.setFixedHeight(6); self.progress.setTextVisible(False); right_layout.addWidget(self.progress); self.switch_tab(0)
+        content_layout.addWidget(left_card, 45); content_layout.addWidget(right_card, 55); main_layout.addLayout(content_layout)
 
     def toggle_max(self):
         if self.is_max: self.showNormal(); self.is_max = False
@@ -503,13 +438,8 @@ class NiflheimApp(QMainWindow):
         btn.clicked.connect(lambda: self.browse(inp)); l.addWidget(inp); l.addWidget(btn); return l
     def switch_tab(self, idx):
         self.stack.setCurrentIndex(idx)
-        colors = ["#007AFF", "#AF52DE", "#FF2D55"]
-        base = "border:none; border-radius: 12px; font-weight: bold; font-family: 'Microsoft YaHei';"
-        active = f"{base} background-color: white; color: #000;"
-        inactive = f"{base} background-color: transparent; color: #555;"
-        for i, b in enumerate(self.tabs):
-            b.setChecked(i == idx)
-            b.setStyleSheet(active if i == idx else inactive)
+        colors = ["#007AFF", "#AF52DE", "#FF2D55"]; base = "border:none; border-radius: 12px; font-weight: bold; font-family: 'Microsoft YaHei';"; active = f"{base} background-color: white; color: #000;"; inactive = f"{base} background-color: transparent; color: #555;"
+        for i, b in enumerate(self.tabs): b.setChecked(i == idx); b.setStyleSheet(active if i == idx else inactive)
         self.progress.setStyleSheet(f"QProgressBar {{border:none; background:rgba(0,0,0,0.1); border-radius:3px;}} QProgressBar::chunk {{background:{colors[idx]}; border-radius:3px;}}")
     def log(self, m): self.log_area.append(m); self.log_area.verticalScrollBar().setValue(self.log_area.verticalScrollBar().maximum())
     def browse(self, target_input):
@@ -517,58 +447,36 @@ class NiflheimApp(QMainWindow):
         if file: target_input.setText(file); self.smart_fill(file)
     def smart_fill(self, path):
         d, n = os.path.dirname(path), os.path.basename(path).upper()
-        if "TEXT.DAT" in n:
-            target = os.path.join(d, "SCRIPT.SRC"); 
-            if os.path.exists(target) and not self.in_script.text(): self.in_script.setText(target)
-        elif "SCRIPT.SRC" in n:
-            target = os.path.join(d, "TEXT.DAT")
-            if os.path.exists(target) and not self.in_text.text(): self.in_text.setText(target)
+        if "TEXT.DAT" in n: target = os.path.join(d, "SCRIPT.SRC"); 
+        elif "SCRIPT.SRC" in n: target = os.path.join(d, "TEXT.DAT")
+        else: return
+        if os.path.exists(target) and not (self.in_script.text() if "TEXT.DAT" in n else self.in_text.text()):
+            (self.in_script if "TEXT.DAT" in n else self.in_text).setText(target)
+            
     def check_files(self):
-        if not os.path.exists(self.in_text.text()) or not os.path.exists(self.in_script.text()):
-            self.log("❌ 错误：必需的游戏文件缺失！"); return False
+        if not os.path.exists(self.in_text.text()) or not os.path.exists(self.in_script.text()): self.log("❌ 错误：必需的游戏文件缺失！"); return False
         self.engine.text_path = self.in_text.text(); self.engine.script_path = self.in_script.text(); return True
 
     def run_worker(self, mode, arg=None):
         if mode not in ['format', 'import'] and not self.check_files(): return
-        if (mode == 'format' or mode == 'import') and not self.in_text.text(): 
-            self.log("❌ 错误：请先选择 TEXT.DAT"); return
+        if (mode == 'format' or mode == 'import') and not self.in_text.text(): self.log("❌ 错误：请先选择 TEXT.DAT"); return
+        try: start = int(self.spin_start.text().strip() or '0'); end_line = int(self.spin_end.text().strip() or '0')
+        except ValueError: self.log("❌ 错误：“起始/结束ID”无效。请输入数字。"); QMessageBox.warning(self, "输入错误", "ID必须是有效的数字。"); return
+        if not self.spin_start.text().strip(): self.log("⚠️ 警告：起始ID为空，已使用默认值 0。")
+        if not self.spin_end.text().strip(): self.log("⚠️ 警告：结束ID为空，已使用默认值 0 (无限制)。")
         
-        start_text = self.spin_start.text().strip()
-        if not start_text:
-            start = 0
-            self.log("⚠️ 警告：起始ID为空，已使用默认值 0。")
-        else:
-            try:
-                start = int(start_text)
-            except ValueError:
-                self.log(f"❌ 错误：“起始ID”无效。请输入一个数字。")
-                QMessageBox.warning(self, "输入错误", "“起始ID”必须是一个有效的数字。")
-                return
+        enc = self.combo_enc.currentText().split(' ')[0].lower(); name_mode = self.combo_name_pos.currentIndex()
         
-        end_text = self.spin_end.text().strip()
-        if not end_text:
-            end_line = 0
-            self.log("⚠️ 警告：结束ID为空，已使用默认值 0 (无限制)。")
-        else:
-            try: 
-                end_line = int(end_text)
-            except ValueError: 
-                self.log(f"❌ 错误：“结束ID”无效。请输入一个数字。")
-                QMessageBox.warning(self, "输入错误", "“结束ID”必须是一个有效的数字。")
-                return
-
-        enc = self.combo_enc.currentText().split(' ')[0].lower()
-        name_mode = self.combo_name_pos.currentIndex()
+        starters = []
+        if mode == 'format':
+            if self.chk_quote1.isChecked(): starters.append("「")
+            if self.chk_quote2.isChecked(): starters.append("『")
+            if self.chk_quote3.isChecked(): starters.append("（")
+            if self.chk_quote4.isChecked(): starters.append("<s")
         
-        self.setEnabled(False)
-        self.progress.setValue(0)
-        
-        self.worker = Worker(self.engine, mode, start, end_line, name_mode, arg, enc)
-        self.worker.log.connect(self.log)
-        self.worker.prog.connect(self.progress.setValue)
-        self.worker.done.connect(self.on_done)
-        self.worker.err.connect(self.on_err)
-        self.worker.start()
+        self.setEnabled(False); self.progress.setValue(0)
+        self.worker = Worker(self.engine, mode, start, end_line, name_mode, arg, enc, dialogue_starters=starters)
+        self.worker.log.connect(self.log); self.worker.prog.connect(self.progress.setValue); self.worker.done.connect(self.on_done); self.worker.err.connect(self.on_err); self.worker.start()
 
     def do_auto_find(self): self.run_worker('find')
     def do_dump(self): self.run_worker('dump')
@@ -579,27 +487,33 @@ class NiflheimApp(QMainWindow):
     def on_err(self, m): self.setEnabled(True); self.log(f"❌ 发生错误: {m}")
     
     def load_settings(self):
-        self.in_text.setText(self.settings.value("text_path", ""))
-        self.in_script.setText(self.settings.value("script_path", ""))
-        self.spin_start.setText(self.settings.value("start_line", "0"))
-        self.spin_end.setText(self.settings.value("end_line", "0"))
-        self.combo_enc.setCurrentIndex(self.settings.value("encoding_idx", 0, type=int))
-        self.combo_name_pos.setCurrentIndex(self.settings.value("name_pos_idx", 0, type=int))
+        self.in_text.setText(self.settings.value("text_path", "")); self.in_script.setText(self.settings.value("script_path", ""))
+        self.spin_start.setText(self.settings.value("start_line", "0")); self.spin_end.setText(self.settings.value("end_line", "0"))
+        self.combo_enc.setCurrentIndex(self.settings.value("encoding_idx", 0, type=int)); self.combo_name_pos.setCurrentIndex(self.settings.value("name_pos_idx", 0, type=int))
+        self.chk_quote1.setChecked(self.settings.value("quote1_checked", True, type=bool))
+        self.chk_quote2.setChecked(self.settings.value("quote2_checked", True, type=bool))
+        self.chk_quote3.setChecked(self.settings.value("quote3_checked", True, type=bool))
+        self.chk_quote4.setChecked(self.settings.value("quote4_checked", True, type=bool))
         self.log("✓ 设置已加载。")
 
     def save_settings(self):
         self.settings.setValue("text_path", self.in_text.text()); self.settings.setValue("script_path", self.in_script.text())
         self.settings.setValue("start_line", self.spin_start.text()); self.settings.setValue("end_line", self.spin_end.text())
         self.settings.setValue("encoding_idx", self.combo_enc.currentIndex()); self.settings.setValue("name_pos_idx", self.combo_name_pos.currentIndex())
+        self.settings.setValue("quote1_checked", self.chk_quote1.isChecked())
+        self.settings.setValue("quote2_checked", self.chk_quote2.isChecked())
+        self.settings.setValue("quote3_checked", self.chk_quote3.isChecked())
+        self.settings.setValue("quote4_checked", self.chk_quote4.isChecked())
     
     def reset_all(self):
-        self.in_text.clear(); self.in_script.clear()
-        self.spin_start.setText("0"); self.spin_end.setText("0")
+        self.in_text.clear(); self.in_script.clear(); self.spin_start.setText("0"); self.spin_end.setText("0")
         self.combo_enc.setCurrentIndex(0); self.combo_name_pos.setCurrentIndex(0); self.log_area.clear(); self.progress.setValue(0)
+        self.chk_quote1.setChecked(True); self.chk_quote2.setChecked(True); self.chk_quote3.setChecked(True); self.chk_quote4.setChecked(True)
         self.log("🧹 已重置。")
 
     def closeEvent(self, event: QCloseEvent): self.save_settings(); event.accept()
 
+    # <<< MODIFICATION START: The bug is fixed here
     def _calc_cursor_pos(self, p):
         r = self.rect(); m = self.EDGE_MARGIN; edge = self.EDGE_NONE
         if p.x() <= m: edge |= self.EDGE_LEFT
@@ -607,6 +521,7 @@ class NiflheimApp(QMainWindow):
         if p.y() <= m: edge |= self.EDGE_TOP
         if p.y() >= r.height() - m: edge |= self.EDGE_BOTTOM
         return edge
+    # <<< MODIFICATION END
 
     def _set_cursor_shape(self, edge):
         if edge == self.EDGE_LEFT | self.EDGE_TOP or edge == self.EDGE_RIGHT | self.EDGE_BOTTOM: self.setCursor(Qt.CursorShape.SizeFDiagCursor)
@@ -618,19 +533,13 @@ class NiflheimApp(QMainWindow):
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
             edge = self._calc_cursor_pos(e.position().toPoint())
-            if edge != self.EDGE_NONE:
-                self.is_resizing = True; self.resize_edge = edge
-                self.drag_start_pos = e.globalPosition().toPoint()
-                self.old_geometry = QRectF(self.geometry())
-            else:
-                self.is_dragging = True
-                self.drag_start_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            if edge != self.EDGE_NONE: self.is_resizing = True; self.resize_edge = edge; self.drag_start_pos = e.globalPosition().toPoint(); self.old_geometry = QRectF(self.geometry())
+            else: self.is_dragging = True; self.drag_start_pos = e.globalPosition().toPoint() - self.frameGeometry().topLeft()
             e.accept()
 
     def mouseMoveEvent(self, e):
         if self.is_resizing:
-            delta = e.globalPosition().toPoint() - self.drag_start_pos
-            new_geo = self.old_geometry.toRect()
+            delta = e.globalPosition().toPoint() - self.drag_start_pos; new_geo = self.old_geometry.toRect()
             if self.resize_edge & self.EDGE_LEFT: new_geo.setLeft(new_geo.left() + delta.x())
             if self.resize_edge & self.EDGE_RIGHT: new_geo.setRight(new_geo.right() + delta.x())
             if self.resize_edge & self.EDGE_TOP: new_geo.setTop(new_geo.top() + delta.y())
@@ -641,14 +550,9 @@ class NiflheimApp(QMainWindow):
             if new_geo.height() < self.minimumHeight():
                 if self.resize_edge & self.EDGE_TOP: new_geo.setTop(new_geo.bottom() - self.minimumHeight())
                 else: new_geo.setBottom(new_geo.top() + self.minimumHeight())
-            self.setGeometry(new_geo)
-            e.accept()
-        elif self.is_dragging:
-            self.move(e.globalPosition().toPoint() - self.drag_start_pos)
-            e.accept()
-        else:
-            edge = self._calc_cursor_pos(e.position().toPoint())
-            self._set_cursor_shape(edge)
+            self.setGeometry(new_geo); e.accept()
+        elif self.is_dragging: self.move(e.globalPosition().toPoint() - self.drag_start_pos); e.accept()
+        else: self._set_cursor_shape(self._calc_cursor_pos(e.position().toPoint()))
             
     def mouseReleaseEvent(self, e):
         self.is_dragging = False; self.is_resizing = False
