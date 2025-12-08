@@ -1,0 +1,257 @@
+// ==UserScript==
+// @name         全网CG搜 (Hitomi)
+// @namespace    http://tampermonkey.net/
+// @version      12.5
+// @description  精确提取各大Galgame网站标题，一键跳转Hitomi
+// @author       You
+// @match        https://vndb.org/*
+// @match        https://www.moyu.moe/*
+// @match        https://bgm.tv/subject/*
+// @match        https://bangumi.tv/subject/*
+// @match        https://2dfan.com/subjects/*
+// @match        https://2dfdf.de/subjects/*
+// @match        https://2dfmax.top/subjects/*
+// @match        https://fan2d.top/subjects/*
+// @match        https://galge.top/subjects/*
+// @match        https://erogamescape.org/*
+// @match        https://koko.kyara.top/*
+// @match        https://www.dlsite.com/*
+// @match        https://dlsoft.dmm.co.jp/*
+// @match        https://dlsoft.dmm.com/*
+// @match        https://www.dmm.com/*
+// @match        https://www.dmm.co.jp/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    function hasJapanese(str) {
+        return /[\u3040-\u30ff]/.test(str);
+    }
+
+    function cleanKeyword(text) {
+        if (!text) return "";
+        let t = text.trim();
+        
+        t = t.replace(/[\r\n\u200B-\u200D\uFEFF]/g, " ").replace(/\s+/g, " ");
+
+        const trackingIndex = t.search(/[?&]?\s*_g[la]=/i);
+        if (trackingIndex > -1) {
+            console.log('[Hitomi搜] 🛡️ 检测到追踪参数，已拦截:', t.substring(trackingIndex));
+            t = t.substring(0, trackingIndex);
+        }
+
+        t = t.replace(/[&?]+$/, "").trim();
+
+        return t;
+    }
+
+    function createBtn(keyword) {
+        const finalWord = cleanKeyword(keyword);
+        
+        if (!finalWord || finalWord.length < 1) return null;
+
+        const searchUrl = 'https://hitomi.la/search.html?' + encodeURIComponent(finalWord);
+        
+        const link = document.createElement('a');
+        link.href = searchUrl;
+        link.innerHTML = '🔍 Hitomi'; 
+        link.target = '_blank';
+        link.setAttribute('data-hitomi-btn', 'true');
+        link.title = `搜索: ${finalWord}`;
+
+        link.style.cssText = `
+            display: inline-block;
+            margin-left: 10px;
+            padding: 2px 8px;
+            font-size: 13px;
+            color: #fff !important;
+            background-color: #F06292;
+            border-radius: 4px;
+            text-decoration: none;
+            font-weight: bold;
+            line-height: 20px;
+            vertical-align: middle;
+            box-shadow: 1px 1px 3px rgba(0,0,0,0.3);
+            border: 1px solid #EC407A;
+            white-space: nowrap;
+            cursor: pointer;
+            z-index: 9999;
+            user-select: none;
+        `;
+        
+        link.onmouseover = () => { link.style.backgroundColor = '#D81B60'; };
+        link.onmouseout = () => { link.style.backgroundColor = '#F06292'; };
+        link.onclick = (e) => {
+            e.stopPropagation();
+            const currentWord = cleanKeyword(keyword); 
+            const currentUrl = 'https://hitomi.la/search.html?' + encodeURIComponent(currentWord);
+            if (link.href !== currentUrl) {
+                link.href = currentUrl;
+            }
+        };
+        
+        return link;
+    }
+
+    const SITES = [
+        {
+            name: "VNDB",
+            check: () => location.hostname.includes('vndb.org') && location.pathname.startsWith('/v'),
+            run: () => {
+                const allH1 = document.querySelectorAll('h1');
+                let targetH1 = null;
+                for (let h1 of allH1) {
+                    if (h1.closest('header') || h1.id === 'logo') continue;
+                    if (h1.offsetParent === null) continue;
+                    targetH1 = h1;
+                    break;
+                }
+                if (!targetH1) return null;
+
+                let searchKeyword = targetH1.textContent.trim();
+                const japaneseTitle = document.querySelector('h2.alttitle[lang="ja"]');
+                if (japaneseTitle && japaneseTitle.textContent.trim()) {
+                    searchKeyword = japaneseTitle.textContent.trim();
+                }
+                return { target: targetH1, keyword: searchKeyword };
+            }
+        },
+        {
+            name: "MoYu",
+            check: () => location.hostname.includes('moyu.moe'),
+            run: () => {
+                const h1 = document.querySelector('h1');
+                if (!h1) return null;
+                let finalKeyword = h1.textContent.trim();
+                const infoContainer = h1.closest('.flex.flex-col');
+                if (infoContainer) {
+                    const spans = infoContainer.querySelectorAll('span');
+                    for (let span of spans) {
+                        const text = span.textContent.trim();
+                        if (!text || text.length > 80) continue;
+                        if (hasJapanese(text)) {
+                            finalKeyword = text.replace(/Original Name:|原名[:：]/i, '').trim();
+                            break;
+                        }
+                    }
+                }
+                return { target: h1, keyword: finalKeyword };
+            }
+        },
+        {
+            name: "2DFan",
+            check: () => {
+                const h = location.hostname;
+                return (h.includes('2dfan') || h.includes('2dfdf') || h.includes('2dfmax') || h.includes('fan2d') || h.includes('galge.top')) 
+                       && location.pathname.includes('/subjects/');
+            },
+            run: () => {
+                let target = document.querySelector('.block-header h3');
+                if (!target) {
+                    const allH3 = document.querySelectorAll('h3');
+                    for (let h3 of allH3) {
+                        const txt = h3.textContent.trim();
+                        if (txt.includes('2dfan') || txt.includes('galge')) continue;
+                        if (h3.offsetParent === null) continue;
+                        target = h3;
+                        break;
+                    }
+                }
+                if (!target) return null;
+                return { target: target, keyword: target.textContent };
+            }
+        },
+        {
+            name: "DLsite",
+            check: () => location.hostname.includes('dlsite.com') && location.pathname.includes('/work/'),
+            run: () => {
+                const h1 = document.getElementById('work_name');
+                if (!h1) return null;
+                return { target: h1, keyword: h1.textContent };
+            }
+        },
+        {
+            name: "DMM / FANZA",
+            check: () => location.hostname.includes('dmm.co.jp') || location.hostname.includes('dmm.com') || location.hostname.includes('dlsoft.dmm'),
+            run: () => {
+                let h1 = document.querySelector('.productTitle__item--headline');
+                if (!h1) h1 = document.getElementById('title');
+                if (!h1) h1 = document.querySelector('h1');
+                if (!h1) return null;
+                return { target: h1, keyword: h1.textContent };
+            }
+        },
+        {
+            name: "ErogameScape",
+            check: () => location.hostname.includes('erogamescape') || location.hostname.includes('kyara.top'),
+            run: () => {
+                let div = document.getElementById('game_title');
+                if (!div) div = document.getElementById('soft-title');
+                if (!div) return null;
+                
+                let txt = div.textContent.trim();
+                txt = txt.split('(')[0].split('（')[0].trim();
+                const link = div.querySelector('a');
+                if (link && div.id === 'game_title') {
+                    txt = link.textContent.trim();
+                }
+                return { target: div, keyword: txt };
+            }
+        },
+        {
+            name: "Bangumi",
+            check: () => location.hostname.includes('bgm.tv') || location.hostname.includes('bangumi.tv'),
+            run: () => {
+                const h1 = document.querySelector('h1.nameSingle');
+                if (!h1) return null;
+                const link = h1.querySelector('a');
+                return { target: h1, keyword: link ? link.textContent : h1.textContent };
+            }
+        }
+    ];
+
+    function main() {
+        const site = SITES.find(s => s.check());
+        if (!site) return;
+
+        const res = site.run();
+        if (!res || !res.target) return;
+
+        const existingBtn = res.target.querySelector('[data-hitomi-btn]');
+        if (existingBtn) {
+            return;
+        }
+
+        const btn = createBtn(res.keyword);
+        if (!btn) return;
+
+        const debugWord = decodeURIComponent(btn.href.split('?')[1]);
+        if (debugWord.includes('_gl') || debugWord.includes('_ga')) {
+            console.warn('[Hitomi搜] 警告：清洗失败，仍包含追踪参数 ->', debugWord);
+        } else {
+            console.log(`[Hitomi搜] 站点:${site.name} | 最终词:${debugWord}`);
+        }
+
+        try {
+            res.target.appendChild(btn);
+        } catch {
+            if (res.target.parentNode) {
+                res.target.parentNode.insertBefore(btn, res.target.nextSibling);
+            }
+        }
+        res.target.setAttribute('data-hitomi-added', 'true');
+    }
+
+    let checks = 0;
+    const timer = setInterval(() => {
+        main();
+        checks++;
+        if (checks > 20) {
+            clearInterval(timer);
+            setInterval(main, 3000);
+        }
+    }, 800);
+
+})();
