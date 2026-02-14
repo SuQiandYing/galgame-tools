@@ -1,0 +1,2 @@
+去cpp里面修改对应的xp3文件名就行，默认patch.xp3，修改完后点击build.bat即可编译对应的version.dll，配合xp3packer打包的xp3放在根目录即可使用
+对应代码：const wchar_t* TARGET_XP3 = L"patch.xp3"; 
