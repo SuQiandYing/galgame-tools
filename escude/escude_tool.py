@@ -986,7 +986,8 @@ def unpack_text(bin_dir, output_dir, names, src_encoding='cp932', logger=print):
                         logger(f"  [ESCR] 提取 {len(strings)} 条文本 -> {out_name}")
                         continue
                     
-                    mess_path = bin_path.replace('.bin', '.001')
+                    base_name_path, _ = os.path.splitext(bin_path)
+                    mess_path = base_name_path + ".001"
                     if not os.path.exists(mess_path):
                         logger(f"  跳过: 找不到对应的 .001 文件")
                         skipped += 1
