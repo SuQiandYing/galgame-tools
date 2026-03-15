@@ -995,26 +995,21 @@ def unpack_text(bin_dir, output_dir, names, src_encoding='cp932', logger=print):
                     with open(mess_path, 'rb') as f_mess: mess_data = f_mess.read()
                     acpx = ACPX_Bin(bin_data, mess_data)
                     if not acpx.mess or not acpx.mess.is_valid:
-                        logger(f"  跳过: .001 文件格式不匹配 (需要 @mess:__ 格式)")
+                        logger(f"  跳过: .001 文件格式不匹配")
                         skipped += 1
                         continue
-                    lines = acpx.get_text_with_names(names, src_encoding)
+                    
+                    # 彻底改为 1:1 映射，不提取姓名以保证索引绝对同步
                     out_name = os.path.splitext(f)[0] + ".txt"
                     out_path = os.path.join(out_folder, out_name)
                     with open(out_path, 'w', encoding='utf-8') as f_out:
-                        line_num = 0
-                        for line in lines:
-                            name = line.get("name", "")
-                            message = line.get("message", "")
-                            if name:
-                                f_out.write(f"○{line_num:06d}○{name}\n")
-                                f_out.write(f"●{line_num:06d}●{name}\n\n")
-                                line_num += 1
-                            f_out.write(f"○{line_num:06d}○{message}\n")
-                            f_out.write(f"●{line_num:06d}●{message}\n\n")
-                            line_num += 1
+                        for i, s_bytes in enumerate(acpx.mess.strings):
+                            text = s_bytes.decode(src_encoding, errors='ignore')
+                            f_out.write(f"○{i:06d}○{text}\n")
+                            f_out.write(f"●{i:06d}●{text}\n\n")
+                    
                     count += 1
-                    logger(f"  提取 {len(lines)} 条文本 -> {out_name}")
+                    logger(f"  [ACPX] 提取 {len(acpx.mess.strings)} 条文本 -> {out_name}")
                 except Exception as e:
                     logger(f"  错误: {e}")
                     skipped += 1
@@ -1040,19 +1035,8 @@ def parse_txt_file(txt_lines):
         p = parse_txt_line(line)
         if p:
             parsed.append(p)
-    result = []
-    i = 0
-    while i < len(parsed):
-        current = parsed[i]
-        text = current["text"]
-        if text.startswith("「") or not any(c in text for c in "「」"):
-            if i > 0 and not parsed[i-1]["text"].startswith("「"):
-                name = parsed[i-1]["text"]
-                result.append({"name": name, "message": text})
-            else:
-                result.append({"message": text})
-        i += 1
-    return result
+    # 返回原始带索引的列表
+    return parsed
 
 def pack_text(txt_dir, bin_dir, output_dir, names, dst_encoding='cp932', logger=print):
     if not os.path.exists(output_dir):
@@ -1081,13 +1065,15 @@ def pack_text(txt_dir, bin_dir, output_dir, names, dst_encoding='cp932', logger=
                     bin_data = f_bin.read()
                 try:
                     acpx = ACPX_Bin(bin_data, mess_data)
-                    msg_idx = 0
-                    for cmd in acpx.commands:
-                        if cmd['op'] in ('29', '2b'):
-                            idx = cmd['args'][0]
-                            if msg_idx < len(lines) and idx < len(acpx.mess.strings):
-                                acpx.mess.strings[idx] = lines[msg_idx]['message'].encode(dst_encoding, errors='ignore')
-                            msg_idx += 1
+                    # 彻底改为 1:1 回填，完全无视指令 Opcode，解决错位问题
+                    fill_count = 0
+                    for item in lines:
+                        idx = item['idx']
+                        text = item['text']
+                        if idx < len(acpx.mess.strings):
+                            acpx.mess.strings[idx] = text.encode(dst_encoding, errors='ignore')
+                            fill_count += 1
+                    
                     out_mess_path = os.path.join(out_folder, f"{name}.001")
                     with open(out_mess_path, 'wb') as f_out:
                         f_out.write(acpx.mess.save())
@@ -1399,23 +1385,40 @@ class Worker(QThread):
             elif self.mode == 'pack_text':
                 input_d = self.params['input_dir']
                 output_d = self.params['output_dir']
-                data_input_d = self.params['data_input_dir']
-                data_output_d = self.params['data_output_dir']
+                data_input_d = self.params.get('data_input_dir', '')
+                data_output_d = self.params.get('data_output_dir', '')
                 dst_enc = self.params['dst_encoding']
-                db_scripts_path = os.path.join(data_input_d, "db_scripts.bin")
                 
+                # 处理人名数据
+                names = []
                 names_file = os.path.join(input_d, 'names.txt')
-                self.log.emit("\n[步骤1] 读取角色名...")
-                with open(names_file, 'r', encoding='utf-8') as f:
-                    names = [{"name": line.strip()} for line in f.readlines()]
-                self.log.emit(f"已加载 {len(names)} 个角色名")
+                if os.path.exists(names_file):
+                    self.log.emit("\n[步骤1] 读取角色名...")
+                    with open(names_file, 'r', encoding='utf-8') as f:
+                        names = [{"name": line.strip()} for line in f.readlines()]
+                    self.log.emit(f"已加载 {len(names)} 个角色名")
+                else:
+                    self.log.emit("\n[步骤1] 跳过角色名加载 (names.txt 不存在)")
+
                 self.log.emit("\n[步骤2] 导入对话文本...")
                 os.makedirs(output_d, exist_ok=True)
-                pack_text(input_d, data_input_d, output_d, names, dst_enc, logger=self.log.emit)
-                self.log.emit("\n[步骤3] 导入角色名到 db_scripts.bin...")
-                os.makedirs(data_output_d, exist_ok=True)
-                db_out_path = os.path.join(data_output_d, "db_scripts.bin")
-                pack_names(names, db_scripts_path, db_out_path, dst_enc, logger=self.log.emit)
+                # 如果没有 data_input_d，pack_text 内部会根据 rel_path 找文件，
+                # 我们这里主要确保 bin_dir 路径有效
+                pack_text(input_d, data_input_d if data_input_d else input_d, output_d, names, dst_enc, logger=self.log.emit)
+                
+                # 如果提供了 data 输出路径且 db_scripts 存在，则尝试封包人名
+                if data_input_d and data_output_d:
+                    db_scripts_path = os.path.join(data_input_d, "db_scripts.bin")
+                    if os.path.exists(db_scripts_path):
+                        self.log.emit("\n[步骤3] 导入角色名到 db_scripts.bin...")
+                        os.makedirs(data_output_d, exist_ok=True)
+                        db_out_path = os.path.join(data_output_d, "db_scripts.bin")
+                        pack_names(names, db_scripts_path, db_out_path, dst_enc, logger=self.log.emit)
+                    else:
+                        self.log.emit("\n[步骤3] 跳过角色名封包 (找不到原始 db_scripts.bin)")
+                else:
+                    self.log.emit("\n[步骤3] 跳过角色名封包 (未设置 data 输出目录)")
+                
                 self.log.emit(f"\n{'='*50}")
                 self.log.emit("导入完成!")
                 self.done.emit("导入成功")
@@ -2373,15 +2376,19 @@ class EscudeApp(QMainWindow):
             }
             self.worker = Worker('unpack_text', params)
         else:
-            if not data_input_d or not data_output_d:
-                QMessageBox.warning(self, "错误", "导入模式需要设置 data目录 和 data输出")
-                self.setEnabled(True)
-                return
+            # 移除 data 目录的强制拦截
+            # if not data_input_d or not data_output_d:
+            #     QMessageBox.warning(self, "错误", "导入模式需要设置 data目录 和 data输出")
+            #     self.setEnabled(True)
+            #     return
+            
+            # 移除 names.txt 的强制拦截
             names_file = os.path.join(input_d, "names.txt")
-            if not os.path.exists(names_file):
-                QMessageBox.warning(self, "错误", f"找不到 names.txt: {names_file}")
-                self.setEnabled(True)
-                return
+            # if not os.path.exists(names_file):
+            #     QMessageBox.warning(self, "错误", f"找不到 names.txt: {names_file}")
+            #     self.setEnabled(True)
+            #     return
+            
             self.log("=" * 50)
             self.log("开始导入文本")
             self.log("=" * 50)
