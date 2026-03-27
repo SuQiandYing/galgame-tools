@@ -942,8 +942,11 @@ class SilkyMesScript:
                         ]
 
                         for j, li in enumerate(str_line_indices):
-                            if li is not None and j < len(cleaned_parts):
-                                lines[li] = json.dumps([cleaned_parts[j]], ensure_ascii=False) + '\n'
+                            if li is not None:
+                                if j < len(cleaned_parts):
+                                    lines[li] = json.dumps([cleaned_parts[j]], ensure_ascii=False) + '\n'
+                                else:
+                                    lines[li] = json.dumps([""], ensure_ascii=False) + '\n'
 
                         # Handle ruby_reading: update or clear reading text
                         for j, (data, text, ptype) in enumerate(text_parts):
