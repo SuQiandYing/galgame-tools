@@ -677,19 +677,13 @@ class SilkyMesScript:
 
     @classmethod
     def _collect_text_block(cls, lines, start, total):
-        """Collect all STR_UNCRYPT text parts belonging to one dialogue block.
-
-        Returns (text_parts, next_i, detected_name, name_arg_line_idx) where:
-        - text_parts: list of (arg_line_index, text_string, part_type) tuples
-          For ruby_reading: arg_line_index is the int line index of the reading STR_UNCRYPT arg
-        - detected_name: character name found inside the block (or None)
-        - name_arg_line_idx: line index of the name's PUSH_STR arg (or None)
-        """
+        """Collect all STR_UNCRYPT text parts belonging to one dialogue block."""
         text_parts = []
         detected_name = None
         name_arg_line_idx = None
         i = start
         in_ruby = False
+        pending_rubies = []
 
         while i < total:
             cl = lines[i].rstrip('\n')
@@ -706,7 +700,15 @@ class SilkyMesScript:
                 arg_line = lines[i + 1].rstrip('\n') if i + 1 < total else '[]'
                 text_val = cls._parse_json_str(arg_line)
 
-                if in_ruby:
+                if pending_rubies:
+                    text_parts.append((i + 1, text_val, 'ruby_base'))
+                    
+                    reading = ''.join([t[1] for t in pending_rubies])
+                    all_ruby_line_indices = [t[0] for t in pending_rubies]
+                    text_parts.append((all_ruby_line_indices, reading, 'ruby_reading'))
+                    
+                    pending_rubies = []
+                elif in_ruby:
                     text_parts.append((i + 1, text_val, 'ruby_part'))
                 else:
                     text_parts.append((i + 1, text_val, 'text'))
@@ -723,7 +725,15 @@ class SilkyMesScript:
             elif cl == '#1-RETURN' and in_ruby:
                 i += 2
                 in_ruby = False
-                cls._finalize_ruby(text_parts)
+                
+                ruby_texts = []
+                while text_parts and text_parts[-1][2] == 'ruby_part':
+                    ruby_texts.insert(0, text_parts.pop())
+
+                if text_parts and text_parts[-1][2] == 'ruby_switch':
+                    text_parts.pop()
+                    
+                pending_rubies = ruby_texts
 
             elif cl in cls._BLOCK_END_OPCODES:
                 break
@@ -742,41 +752,13 @@ class SilkyMesScript:
 
             else:
                 i += 1
+                
+        if pending_rubies:
+            text_parts.extend(pending_rubies)
 
         return text_parts, i, detected_name, name_arg_line_idx
 
-    @staticmethod
-    def _finalize_ruby(text_parts):
-        """Convert the last sequence of ruby_part entries into a ruby annotation.
 
-        The reading's STR_UNCRYPT arg line index (int) is stored in the
-        ruby_reading entry so import_text can update it.
-        """
-        ruby_texts = []
-        while text_parts and text_parts[-1][2] == 'ruby_part':
-            ruby_texts.insert(0, text_parts.pop())
-
-        # Pop the ruby_switch entry
-        if text_parts and text_parts[-1][2] == 'ruby_switch':
-            text_parts.pop()
-
-        if not ruby_texts or not text_parts:
-            text_parts.extend(ruby_texts)
-            return
-
-        readings = [t[1] for t in ruby_texts if t[1].strip()]
-        if readings:
-            reading = readings[-1]
-        else:
-            reading = ''.join(t[1] for t in ruby_texts)
-
-        # Collect ALL ruby_part line indices (separator + reading)
-        all_ruby_line_indices = [t[0] for t in ruby_texts]
-
-        last_idx, last_text, _ = text_parts[-1]
-        text_parts[-1] = (last_idx, last_text, 'ruby_base')
-        # Store all ruby part line indices so import_text can clear them all
-        text_parts.append((all_ruby_line_indices, reading, 'ruby_reading'))
 
     @staticmethod
     def extract_text(opcode_txt_path: str, text_txt_path: str) -> int:
@@ -923,14 +905,19 @@ class SilkyMesScript:
                         trans = translations[seq]
                         trans_parts = trans.split('\\n')
 
-                        # Parse ruby from translated text: {base|reading}
+                        # Parse ruby from translated text: {base|reading1|reading2...}
                         cleaned_parts = []
-                        ruby_map = {}  # part_index -> reading (or None if no ruby)
+                        ruby_map = {}  # part_index -> list of readings (or None if no ruby)
                         for pidx, p in enumerate(trans_parts):
-                            m = _re.search(r'\{([^|]+)\|([^}]+)\}', p)
-                            if m:
-                                cleaned_parts.append(_re.sub(r'\{([^|]+)\|[^}]+\}', r'\1', p))
-                                ruby_map[pidx] = m.group(2)
+                            m = _re.search(r'\{([^}]+)\}', p)
+                            if m and '|' in m.group(1):
+                                inner = m.group(1)
+                                split_inner = inner.split('|')
+                                base_text = split_inner[0]
+                                ruby_parts = split_inner[1:]
+                                
+                                cleaned_parts.append(_re.sub(r'\{[^}]+\}', base_text, p, count=1))
+                                ruby_map[pidx] = ruby_parts
                             else:
                                 cleaned_parts.append(p)
                                 ruby_map[pidx] = None
@@ -963,8 +950,17 @@ class SilkyMesScript:
                                 if (base_part_idx is not None and
                                     base_part_idx in ruby_map and
                                     ruby_map[base_part_idx] is not None):
-                                    # Translation kept ruby: update reading (last line)
-                                    lines[data[-1]] = json.dumps([ruby_map[base_part_idx]], ensure_ascii=False) + '\n'
+                                    # Translation kept ruby: update reading across `data`
+                                    translated_ruby_parts = ruby_map[base_part_idx]
+                                    for idx, li in enumerate(data):
+                                        if idx < len(translated_ruby_parts):
+                                            if idx == len(data) - 1 and len(translated_ruby_parts) > len(data):
+                                                merged_text = "".join(translated_ruby_parts[idx:])
+                                                lines[li] = json.dumps([merged_text], ensure_ascii=False) + '\n'
+                                            else:
+                                                lines[li] = json.dumps([translated_ruby_parts[idx]], ensure_ascii=False) + '\n'
+                                        else:
+                                            lines[li] = json.dumps([""], ensure_ascii=False) + '\n'
                                 else:
                                     # Translation removed ruby: clear ALL ruby parts (separator + reading)
                                     for li in data:
