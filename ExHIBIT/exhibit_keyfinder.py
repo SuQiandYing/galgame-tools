@@ -12,14 +12,14 @@ class KeyFinderManager:
         self.log_queue = log_queue
         self.status_cb = status_cb
         self.log_cb = log_cb
-        self.process_cb = process_cb  # Used to track if a process is running
+        self.process_cb = process_cb
 
     def clean_game_key_files(self, game_exe):
         if not game_exe:
             return False, "请先选择游戏 EXE"
 
         game_dir = Path(game_exe).parent
-        target_files = ["key.bin", "key_def.bin", "key.txt", "key_def.txt"]
+        target_files = ["key.bin", "key_def.bin", "key.txt", "key_def.txt", "KeyFinder.dll"]
         removed = []
         failed = []
 
@@ -34,14 +34,14 @@ class KeyFinderManager:
                 failed.append((name, str(exc)))
 
         if removed:
-            self.log_cb(f"已清理游戏目录 key 文件: {', '.join(removed)}")
+            self.log_cb(f"已清理游戏目录 key/dll 文件: {', '.join(removed)}")
         if failed:
             self.log_cb("以下文件清理失败（通常是游戏还没关闭）:")
             for name, err in failed:
                 self.log_cb(f"  {name}: {err}")
-            return False, "部分 key 文件删除失败，通常是游戏进程仍在占用，请关闭游戏后重试。"
+            return False, "部分文件删除失败，通常是游戏进程仍在占用，请关闭游戏后重试。"
         elif not removed:
-            self.log_cb("游戏目录中未发现需要清理的 key 文件。")
+            self.log_cb("游戏目录中未发现需要清理的 key/dll 文件。")
         
         return True, ""
 
