@@ -31,7 +31,6 @@ class ExHIBITAllInOneGUI(TkinterDnD.Tk if HAS_DND else tk.Tk):
         self.geometry("980x760")
         self.minsize(920, 700)
 
-        # 获取程序运行目录（兼容打包后的环境）
         if getattr(sys, 'frozen', False):
             self.base_dir = Path(sys.executable).parent
         else:
@@ -43,7 +42,6 @@ class ExHIBITAllInOneGUI(TkinterDnD.Tk if HAS_DND else tk.Tk):
         self.log_queue = queue.Queue()
         self.process = None
 
-        # XOR 密钥配置（从内置改为变量控制）
         self.xor_key_var = tk.StringVar(value="")
         self.def_xor_key_var = tk.StringVar(value="")
 
@@ -141,7 +139,7 @@ class ExHIBITAllInOneGUI(TkinterDnD.Tk if HAS_DND else tk.Tk):
         ttk.Button(btn_row, text="刷新检查", command=self.refresh_env_text).pack(side="left")
         ttk.Button(btn_row, text="启动 KeyFinder", command=self.start_loader).pack(side="left", padx=8)
         ttk.Button(btn_row, text="普通启动游戏", command=self.start_game_normal).pack(side="left")
-        ttk.Button(btn_row, text="清理游戏目录Key", command=self.clean_game_key_files).pack(side="left", padx=8)
+        ttk.Button(btn_row, text="清理游戏目录Key/dll", command=self.clean_game_key_files).pack(side="left", padx=8)
         ttk.Button(btn_row, text="打开游戏目录", command=self.open_work_dir).pack(side="left", padx=8)
 
         frame.columnconfigure(1, weight=1)
@@ -370,6 +368,19 @@ class ExHIBITAllInOneGUI(TkinterDnD.Tk if HAS_DND else tk.Tk):
             return
         
         work_dir = str(exe_p.parent)
+        game_dir = exe_p.parent
+
+        # Loader 注入 DLL 时，游戏进程会在自己的目录搜索 KeyFinder.dll
+        # 因此需要确保游戏目录中存在该 DLL
+        target_dll = game_dir / "KeyFinder.dll"
+        if not target_dll.exists():
+            import shutil
+            try:
+                shutil.copy2(str(self.dll_path), str(target_dll))
+                self.log(f"已自动复制 KeyFinder.dll → {game_dir}")
+            except Exception as e:
+                messagebox.showerror("错误", f"无法复制 KeyFinder.dll 到游戏目录: {e}")
+                return
 
         command = [str(self.loader_path), "-exe", game_exe]
         self.log("=" * 60)
