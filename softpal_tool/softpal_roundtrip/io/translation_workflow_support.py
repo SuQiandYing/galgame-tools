@@ -69,7 +69,7 @@ def build_translation_header(idx_start: int | None, idx_end: int | None) -> list
     return [
         "# SOFTPAL_TRANSLATE_V1",
         "# Supplemental tags: `title`=作品标题, `chapter_title`=章节标题, `route_title`=路线/分支标题, `replay_title`=回想标题。",
-        "# 规则：每组只改第二行；第一行保持原文作对照；不要改动 `●编号●标签●` 这一段。",
+        "# 规则：每组只改第二行；第一行保持原文作对照；不要改动 `○编号○标签○` 这一段。",
         "# 标签说明：`name`=人名, `text`=正文/旁白, `choice`=可见选项文本, `label`=机器脚本标签, `label_text`=文本型分支锚点, `label_internal`=内部锚点/标签, `ui`=可见 UI 文本, `display`=可见的独立展示文本, `system`=系统提示, `font`=字体名, `kana`=假名索引, `symbol`=分隔符/符号文本, `asset`=资源名或路径, `config`=配置/内部 ID, `scenario`=场景 ID, `debug`=调试/格式串, `misc`=未识别的其他文本, `unused`=当前未被引用。",
         (
             "# 提取范围：ALL"
