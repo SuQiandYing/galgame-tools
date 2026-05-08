@@ -397,8 +397,8 @@ class SoftpalToolGUI(GuiActionsMixin):
     def _build_action_cards(self, parent: ttk.Frame) -> None:
         cards = [
             ("反汇编与定位", "先解析 SCRIPT.SRC / TEXT.DAT，并自动尝试定位锚点。", [("1. 反汇编脚本", self._task_dump_and_export)]),
-            ("导出文本", "导出整包译文，或按 scenario 分拆输出。", [("2. 仅导出译文", self._task_export_only), ("3. 按 scenario 导出", self._task_export_scenarios)]),
-            ("导入并回封", "把修改后的文本导回 dump，并执行变长回封。", [("4. 导入 + 变长回封", self._task_import_and_rebuild_relocate), ("5. scenario 导入 + 变长", self._task_import_scenarios_and_rebuild_relocate)]),
+            ("导出文本", "导出整包译文，或按场景拆分导出。", [("2. 导出译文", self._task_export_only), ("3. 分场景导出", self._task_export_scenarios)]),
+            ("导入并回封", "把修改后的文本导入并重新回封。", [("4. 导入并回封", self._task_import_and_rebuild_relocate), ("5. 分场景导入", self._task_import_scenarios_and_rebuild_relocate)]),
         ]
 
         for idx in range(3):
@@ -409,14 +409,19 @@ class SoftpalToolGUI(GuiActionsMixin):
             card.grid(row=0, column=idx, sticky="nsew", padx=(0 if idx == 0 else 10, 0))
             card.columnconfigure(0, weight=1)
             card.rowconfigure(0, weight=1, minsize=92)
-            ttk.Label(
+            hint_label = ttk.Label(
                 card,
                 text=hint,
                 style="CardHint.TLabel",
-                wraplength=210,
+                wraplength=1,
                 justify="left",
                 anchor="nw",
-            ).grid(row=0, column=0, sticky="nsew", pady=(0, 14))
+            )
+            hint_label.grid(row=0, column=0, sticky="nsew", pady=(0, 14))
+            hint_label.bind(
+                "<Configure>",
+                lambda event, label=hint_label: label.configure(wraplength=max(event.width - 6, 60)),
+            )
             for button_row, (text, command) in enumerate(buttons, start=1):
                 style = "Action.Primary.TButton" if idx == 0 and button_row == 1 else "Action.Secondary.TButton"
                 top_padding = 0 if button_row == 1 else 10
@@ -448,15 +453,15 @@ class SoftpalToolGUI(GuiActionsMixin):
             "推荐流程\n\n"
             "1. 先选择项目目录，点“自动识别项目文件”。\n"
             "2. 点“1. 反汇编脚本”，生成 dump 并尝试自动定位。\n"
-            "3. 按需要点“2. 仅导出译文”或“3. 按 scenario 导出”。\n"
-            "4. 修改文本后，再执行“4. 导入 + 变长回封”或“5. scenario 导入 + 变长”。\n\n"
+            "3. 按需要点“2. 导出译文”或“3. 分场景导出”。\n"
+            "4. 修改文本后，再执行“4. 导入并回封”或“5. 分场景导入”。\n\n"
             "路径说明\n\n"
             "项目目录：自动识别路径时使用的根目录。\n"
             "SCRIPT.SRC：原始脚本文件，反汇编和回封都需要。\n"
             "TEXT.DAT：原始文本文件，反汇编和回封都需要。\n"
             "Dump 目录：反汇编后的中间数据目录，后续导出、导入、回封都依赖它。\n"
             "翻译文本：单文件导出/导入时使用的译文 txt 文件。\n"
-            "Scenario 目录：按场景拆分导出/导入时使用的目录。\n"
+            "Scenario 目录：按场景拆分导出或导入时使用的目录。\n"
             "输出目录：回封结果输出位置。\n\n"
             "参数说明\n\n"
             "提取解码：读取 TEXT.DAT 时使用的编码，选错会导致导出乱码。\n"
