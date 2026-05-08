@@ -1,3 +1,3 @@
 01_search=^●\d+●name●(?P<name>.*)$
 02_search=^●\d+●text●(?:<s\d+>)?(?P<message>.*?)(?:</s>)?$
-03_search=^●\d+●choice`●(?P<message>.*)$
+03_search=^●\d+●choice●(?P<message>.*)$
