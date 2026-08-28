@@ -2,7 +2,7 @@
 // @name         Galgame 跨站搜索跳转助手
 // @description  在 Galgame 数据库、攻略站和资源站之间快速跳转搜索。
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      2.0
 // @author       是幼微鸭mua
 // @match        https://vndb.org/*
 // @match        https://www.vndb.org/*
@@ -64,15 +64,15 @@
 // @noframes
 // @license      MIT
 // ==/UserScript==
- 
+
 (function () {
     'use strict';
- 
+
     const MAX_TITLE_LENGTH = 180;
     const MIN_FINGER_LENGTH = 2;
-    const TOOLBAR_VERSION = '3.4';
+    const TOOLBAR_VERSION = '2.0';
     const TITLE_CONTENT_RE = /[A-Za-z0-9\u00c0-\u024f\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f\u3005]/;
- 
+
     // Page chrome and release labels should never become a search keyword by themselves.
     const NOISE_EXACT = new Set([
         '攻略', '攻略wiki', '存档', 'save', 'download', '下载', '下载资源', '资源',
@@ -111,7 +111,7 @@
     const GENERIC_UI_TITLE_RE = /^(?:the\s+visual\s+novel\s+database|releases?|staff|characters?(?:\s+summary)?|user\s+stats|screenshots?|menu|home|login|register|search|search\s+results?|results?|loading|next|previous|page|首页|登录|注册|搜索|搜索结果|验证|安全验证|正在加载|加载中|请稍候)$/iu;
     const CHALLENGE_TITLE_RE = /^(?:请稍候|正在进行安全验证|验证成功|checking\s+your\s+browser|just\s+a\s+moment|cloudflare|access\s+denied|verify\s+you\s+are\s+human|(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+){1,3})$/iu;
     const SITE_BRAND_TITLE_RE = /^(?:e[-\s]?hentai|exhentai|hitomi(?:\.la)?|sukebei|nyaa|ggbases?|sagao[.．]?z|誠也の部屋|erogamescape|koko(?:\.kyara\.top)?|kyara|moepedia|vgmdb|bishogedb|びしょげdb|vndb|2dfan|ai2|moyu)(?:$|[\s:：|｜\-–—(（])/iu;
- 
+
     // Query punctuation is deliberately data-driven. The old table treated the
     // normal letter x/X as a cross, corrupting titles such as "Aokana" and "Xbox".
     // Only non-ASCII cross glyphs are converted below.
@@ -121,12 +121,12 @@
         ggbase: Object.freeze({ preserveCross: true, preserveMiddleDot: true, preserveAll: true })
     });
     const ENGINE_QUERY_PROFILE = Object.freeze({ moonchan: 'moonchan', ggbase: 'ggbase' });
- 
+
     function normalizeQuerySymbols(value, profileName = 'default') {
         const profile = QUERY_PROFILES[profileName] || QUERY_PROFILES.default;
         let result = flattenText(value);
         if (profile.preserveAll) return result.replace(/\s+/g, ' ').trim();
- 
+
         result = result
             .replace(/[×✕✖✗✘⨉⨯]/gu, profile.preserveCross ? '×' : ' ')
             .replace(/[·・●•‧⋅∙]/gu, profile.preserveMiddleDot ? '・' : ' ')
@@ -141,7 +141,7 @@
             .replace(/[^\p{L}\p{N}\s×・'&]/gu, ' ');
         return result.replace(/\s+/g, ' ').trim();
     }
- 
+
     const ENGINES = {
         hitomi: { name: 'Hitomi', bg: '#F06292', url: 'https://hitomi.la/search.html?' },
         moonchan: { name: 'Ex', bg: '#424242', url: 'https://ex.moonchan.xyz/?f_search=' },
@@ -188,7 +188,7 @@
         vgmdb: /(?:^|\.)vgmdb\.net$/i,
         bishogedb: /^(?:www\.)?bishogedb\.com$/i
     };
- 
+
     const UI_STYLE_ID = 'cg-search-ui-style';
     const UI_CSS = `
         /* Hide an older copy immediately; it may otherwise remain over the host layout. */
@@ -309,6 +309,12 @@
             opacity: 1 !important;
             transition: filter .16s ease !important;
         }
+        /* Do not inherit host external-link decorations or label pseudo-elements. */
+        .cg-search-toolbar__button::before,
+        .cg-search-toolbar__button::after {
+            content: none !important;
+            display: none !important;
+        }
         .cg-search-toolbar__button:hover,
         .cg-search-toolbar__button:focus-visible {
             filter: brightness(.86) !important;
@@ -322,7 +328,7 @@
             }
         }
     `;
- 
+
     function ensureUiStyles() {
         const existing = document.getElementById(UI_STYLE_ID);
         if (existing && existing.getAttribute('data-cg-style-version') === TOOLBAR_VERSION) return;
@@ -333,21 +339,21 @@
         style.textContent = UI_CSS;
         (document.head || document.documentElement).appendChild(style);
     }
- 
+
     const entityDecoder = document.createElement('textarea');
- 
+
     function decodeEntities(value) {
         entityDecoder.innerHTML = String(value || '');
         return entityDecoder.value;
     }
- 
+
     function textFromElement(element) {
         if (!element) return '';
         if (element instanceof HTMLMetaElement) return element.content || '';
         if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return element.value || '';
         return element.innerText || element.textContent || '';
     }
- 
+
     function replaceControlCharacters(value) {
         return Array.from(String(value || ''), character => {
             const code = character.codePointAt(0);
@@ -356,7 +362,7 @@
                 : character;
         }).join('');
     }
- 
+
     function flattenText(value) {
         return replaceControlCharacters(decodeEntities(String(value || '')))
             .replace(/<br\s*\/?\s*>/gi, ' ')
@@ -364,11 +370,11 @@
             .replace(/[\u200b-\u200d\ufeff]/g, ' ')
             .normalize('NFKC');
     }
- 
+
     function compactForNoise(value) {
         return flattenText(value).toLowerCase().replace(/[^a-z0-9\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f]/g, '');
     }
- 
+
     function isNoiseSegment(value) {
         const raw = flattenText(value).trim();
         const compact = compactForNoise(value);
@@ -380,7 +386,7 @@
         if (/^(?:pc|win|windows|mac|linux|android|ios|steam|switch|ps[345]|xbox|web|r18|18禁|全年龄|汉化|中文|简中|繁中|官方|下载|资源|攻略|存档|save|patch|补丁)(?:版|版本|edition|补丁)?$/i.test(compact)) return true;
         return compact.length <= 48 && NOISE_SEGMENT_RE.test(compact);
     }
- 
+
     function stripMetadata(value) {
         let result = flattenText(value).replace(/\s+/g, ' ').trim();
         if (!result) return '';
@@ -410,7 +416,7 @@
         result = result.replace(/\s*[-–—]+\s*$/g, ' ');
         return result.replace(/\s+/g, ' ').trim();
     }
- 
+
     function cleanGameTitle(value) {
         let result = stripMetadata(value);
         if (!result) return '';
@@ -434,18 +440,18 @@
         }
         return result.slice(0, MAX_TITLE_LENGTH).trim();
     }
- 
+
     function normalizeForMatch(value) {
         const cleaned = stripMetadata(value).toLowerCase();
         return cleaned.replace(/[^a-z0-9\u00c0-\u024f\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f\u3005]/g, '');
     }
- 
+
     function tokenizeTitle(value) {
         return cleanGameTitle(value).toLowerCase()
             .split(/[^a-z0-9\u00c0-\u024f\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f]+/i)
             .filter(token => token.length > 1 && !NOISE_EXACT.has(token));
     }
- 
+
     function diceCoefficient(left, right) {
         if (!left || !right) return 0;
         if (left === right) return 1;
@@ -460,7 +466,7 @@
         }
         return (2 * overlap) / (left.length + right.length - 2);
     }
- 
+
     function scoreTitleMatch(query, candidate) {
         const q = normalizeForMatch(query);
         const c = normalizeForMatch(candidate);
@@ -484,14 +490,14 @@
         score = Math.max(score, diceCoefficient(q, c) * 0.82);
         return Math.min(1, score);
     }
- 
+
     function isVisible(element) {
         if (!element || element.nodeType !== 1) return false;
         const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
         if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
         return element.offsetParent !== null || element.getClientRects().length > 0;
     }
- 
+
     function isLikelyGameTitle(value) {
         const text = cleanGameTitle(value);
         const finger = normalizeForMatch(text);
@@ -501,13 +507,46 @@
         if (/(?:https?:\/\/|www\.|@)/i.test(text)) return false;
         return true;
     }
- 
+
+    function hasJapaneseText(value) {
+        return /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/u.test(flattenText(value));
+    }
+
+    // VNDB labels its romanized title as `lang="ja-Latn"` and places the
+    // Japanese title in a separate `h2.alttitle[lang="ja"]`. A comma-joined
+    // querySelector chooses by document order, so the romanized h1 wins even
+    // when the Japanese selector is listed first. Resolve localized nodes in
+    // explicit selector priority and require Japanese script content.
+    function findVndbJapaneseTitle() {
+        const selectors = [
+            'h2.alttitle[lang="ja"]',
+            'h2.alttitle[data-lang="ja"]',
+            'h2[lang="ja"]',
+            '[data-lang="ja"]'
+        ];
+        for (const selector of selectors) {
+            const candidate = Array.from(document.querySelectorAll(selector)).find(element => {
+                if (element === document.body || element === document.documentElement) return false;
+                if (!isVisible(element) || !isSafeToolbarTarget(element)) return false;
+                const title = getTitleFromSource(element);
+                return hasJapaneseText(title) && isLikelyGameTitle(title);
+            });
+            if (candidate) return candidate;
+        }
+        return Array.from(document.querySelectorAll('[lang="ja"]')).find(element => {
+            if (element === document.body || element === document.documentElement) return false;
+            if (!isVisible(element) || !isSafeToolbarTarget(element)) return false;
+            const title = getTitleFromSource(element);
+            return hasJapaneseText(title) && isLikelyGameTitle(title) && title.length <= 100;
+        }) || null;
+    }
+
     function getTitleFromSource(source) {
         if (!source) return '';
         if (typeof source === 'string') return cleanGameTitle(source);
         return cleanGameTitle(textFromElement(source));
     }
- 
+
     function chooseTitle(sources) {
         for (const source of sources || []) {
             const title = getTitleFromSource(source);
@@ -515,11 +554,11 @@
         }
         return '';
     }
- 
+
     function getMetaTitle() {
         return [document.querySelector('meta[property="og:title"]'), document.querySelector('meta[name="twitter:title"]'), document.title];
     }
- 
+
     function getQueryKeyword(names) {
         const params = new URLSearchParams(location.search);
         for (const name of names || []) {
@@ -528,14 +567,14 @@
         }
         return '';
     }
- 
+
     function getPathKeyword(prefix) {
         if (!location.pathname.startsWith(prefix)) return '';
         const encoded = location.pathname.slice(prefix.length).split('/')[0];
         if (!encoded) return '';
         try { return cleanGameTitle(decodeURIComponent(encoded.replace(/\+/g, ' '))); } catch { return ''; }
     }
- 
+
     function elementIsUsableCandidate(element) {
         if (!element || !isVisible(element)) return false;
         const tag = element.tagName && element.tagName.toLowerCase();
@@ -544,7 +583,7 @@
         if (/(?:breadcrumb|pagination|comment|author|avatar|navbar|nav-|menu|footer|header|site-name|logo|tag-list|category)/i.test(marker)) return false;
         return true;
     }
- 
+
     function findBestMatch(elements, query, minimum = 0.6) {
         const seen = new Set();
         let best = null;
@@ -559,14 +598,14 @@
         }
         return best;
     }
- 
+
     function findContentHeading(selector) {
         return Array.from(document.querySelectorAll(selector || 'h1, h2, h3')).find(element => {
             if (!isSafeToolbarTarget(element) || !isVisible(element)) return false;
             return isLikelyGameTitle(getTitleFromSource(element));
         }) || null;
     }
- 
+
     function getSmartKeyword(input, engineType) {
         let keyword = cleanGameTitle(input);
         if (!keyword) return '';
@@ -574,7 +613,7 @@
         keyword = keyword.replace(/[?&]utm_[^&=]+=[^&]*/gi, ' ');
         return normalizeQuerySymbols(keyword, ENGINE_QUERY_PROFILE[engineType] || 'default');
     }
- 
+
     function buildSearchUrl(type, keyword) {
         const engine = ENGINES[type];
         const searchWord = getSmartKeyword(keyword, type);
@@ -590,12 +629,12 @@
         if (type === 'bgm') url += '?cat=all';
         return url;
     }
- 
+
     function hostMatchesEngine(type) {
         const matcher = ENGINE_HOSTS[type];
         return !!(matcher && matcher.test(location.hostname));
     }
- 
+
     function shouldSkipEngine(type) {
         if (type === 'dmm' && /^www\.dmm\.(?:com|co\.jp)$/i.test(location.hostname)) return true;
         if (type === 'fanza' && /^dlsoft\.dmm\.(?:com|co\.jp)$/i.test(location.hostname)) return true;
@@ -604,7 +643,7 @@
         if (type === 'sagaoz' && /sagaoz\.net$/i.test(location.hostname)) return true;
         return hostMatchesEngine(type);
     }
- 
+
     function createBtn(keyword, type) {
         const engine = ENGINES[type];
         const finalUrl = buildSearchUrl(type, keyword);
@@ -616,8 +655,13 @@
         link.className = 'cg-search-toolbar__button';
         link.style.setProperty('--cg-engine-bg', engine.bg);
         link.setAttribute('data-cg-btn', 'true');
-        link.setAttribute('aria-label', `在 ${engine.name} 搜索 ${getSmartKeyword(keyword, type)}`);
-        link.title = link.getAttribute('aria-label');
+        link.setAttribute('data-cg-engine', type);
+        link.setAttribute('data-cg-search-keyword', getSmartKeyword(keyword, type));
+        // The keyword belongs in the URL/data attribute, never in the visible
+        // button label or tooltip. This prevents old-style "搜索 <title>"
+        // strings from expanding the toolbar and obscuring host content.
+        link.setAttribute('aria-label', `在 ${engine.name} 搜索`);
+        link.title = `在 ${engine.name} 搜索`;
         link.textContent = `🔍 ${engine.name}`;
         link.addEventListener('mouseenter', () => { link.style.filter = 'brightness(.85)'; });
         link.addEventListener('mouseleave', () => { link.style.filter = 'none'; });
@@ -628,7 +672,7 @@
         });
         return link;
     }
- 
+
     const MAIN_ROOT_SELECTORS = [
         '#main', 'main', '[role="main"]', '#content', '#contents', '#root', '#app',
         '#application', '#__nuxt', '#__next', '[data-reactroot]', '.app-root', '.app-container',
@@ -636,13 +680,13 @@
     ];
     const SIDEBAR_MARKER_RE = /(?:^|[\s_-])(?:left|right)[-_]?(?:menu|sidebar|nav)|(?:^|[\s_-])(?:sidebar|side-menu|sidemenu|navbar|navigation|global-nav|site-nav)(?:$|[\s_-])/i;
     const ROOT_MARKER_RE = /(?:^|[\s_-])(?:main|content|entry|article|work|game|detail|product|app|root|page|layout)(?:$|[\s_-])/i;
- 
+
     function isSidebarLike(element) {
         if (!element || element.nodeType !== 1) return false;
         const marker = `${element.id || ''} ${typeof element.className === 'string' ? element.className : ''}`;
         return SIDEBAR_MARKER_RE.test(marker) || /^(?:header|nav|aside|footer)$/i.test(element.tagName || '');
     }
- 
+
     function findMainRoot(target) {
         for (const selector of MAIN_ROOT_SELECTORS) {
             const roots = Array.from(document.querySelectorAll(selector));
@@ -669,7 +713,7 @@
         }
         return fallback;
     }
- 
+
     function findContentMount() {
         const heading = Array.from(document.querySelectorAll('h1, h2, h3')).find(element => {
             return isVisible(element) && isSafeToolbarTarget(element);
@@ -689,14 +733,14 @@
             return (!style || !['fixed', 'sticky'].includes(style.position)) && isSafeToolbarTarget(element);
         }) || null;
     }
- 
+
     function directChildUnder(root, node) {
         if (!root || !node || !root.contains(node)) return null;
         let current = node;
         while (current.parentElement && current.parentElement !== root) current = current.parentElement;
         return current.parentElement === root ? current : null;
     }
- 
+
     function resolveInsertionAnchor(anchor, root, options = {}) {
         let insertionAnchor = anchor;
         let promoted = false;
@@ -725,7 +769,7 @@
             || (promoted && rect && rect.height > 300);
         return { insertionAnchor, placeBefore };
     }
- 
+
     function createSafeSlot(target, options = {}) {
         const root = options.root || findMainRoot(target);
         const anchor = options.mountAfter || target;
@@ -737,7 +781,7 @@
         const placement = resolveInsertionAnchor(anchor, root, options);
         const insertionAnchor = placement.insertionAnchor;
         if (!insertionAnchor || isSidebarLike(insertionAnchor)) return null;
- 
+
         const slot = document.createElement('div');
         slot.className = 'cg-search-slot';
         slot.setAttribute('data-cg-slot', 'true');
@@ -753,11 +797,11 @@
         insertionAnchor.parentNode.insertBefore(slot, placement.placeBefore ? insertionAnchor : insertionAnchor.nextSibling);
         return slot;
     }
- 
+
     function rectanglesOverlap(first, second) {
         return first.left < second.right && first.right > second.left && first.top < second.bottom && first.bottom > second.top;
     }
- 
+
     function slotLayoutIsSafe(slot, target) {
         const rootCandidate = findMainRoot(target);
         const knownRoot = !!(rootCandidate && rootCandidate.contains(slot));
@@ -778,7 +822,7 @@
         }
         return true;
     }
- 
+
     function relocateSlotToMainEnd(slot, target) {
         const root = findMainRoot(target) || (slot.parentElement && slot.parentElement !== document.body ? slot.parentElement : document.body);
         if (!root || isSidebarLike(root)) return false;
@@ -798,7 +842,7 @@
         }
         return slotLayoutIsSafe(slot, target);
     }
- 
+
     function cleanupLegacyToolbars() {
         const currentSelector = `.cg-search-toolbar[data-cg-toolbar-version="${TOOLBAR_VERSION}"]`;
         const hasCurrentToolbar = !!document.querySelector(currentSelector);
@@ -827,7 +871,7 @@
             });
         }
     }
- 
+
     function createToolbar(keyword, inline = false) {
         ensureUiStyles();
         const toolbar = document.createElement('div');
@@ -845,7 +889,7 @@
         toggle.setAttribute('aria-label', '展开跨站搜索');
         toggle.title = '展开跨站搜索';
         toggle.textContent = '🔍 搜索';
- 
+
         const panel = document.createElement('div');
         panel.className = 'cg-search-toolbar__panel';
         panel.id = toggle.getAttribute('aria-controls');
@@ -871,7 +915,7 @@
         toolbar.appendChild(panel);
         return toolbar;
     }
- 
+
     function attachToolbar(target, keyword, options = {}) {
         if (!isSafeToolbarTarget(target) || target.hasAttribute(options.marker || 'data-cg-added')) return false;
         // A page gets one shared entry bar. Dynamic result pages can replace
@@ -912,13 +956,13 @@
         target.setAttribute(options.marker || 'data-cg-added', 'true');
         return true;
     }
- 
+
     function getTitleItem(target, sources, fallback = '') {
         if (!isSafeToolbarTarget(target)) return null;
         const keyword = chooseTitle([...(sources || []), fallback]);
         return keyword ? { target, keyword } : null;
     }
- 
+
     // DMM/FANZA has many non-product surfaces whose generic h1 is a section
     // label (library, account, navigation, etc.). Never mount the toolbar on
     // those pages; only product title nodes or an explicit search result may
@@ -926,13 +970,13 @@
     const DMM_UTILITY_PATH_RE = /(?:^|\/)(?:mylibrary|my-library|mypage|favorite|favorites|wishlist|cart|login|logout|register|signup|auth|help)(?:\/|$)/i;
     const DMM_PRODUCT_TITLE_SELECTOR = '#work_name, .productTitle__item--headline, .productTitle__txt, h1[data-e2e-title-in-product-detail], [data-testid*="product-title"], [data-testid*="work-name"], .product-title, .work_name';
     const DMM_PRODUCT_PATH_RE = /\/(?:dc\/[^/]+\/[-_]\/detail|detail|product|digital|mono)(?:\/|$)/i;
- 
+
     function isDmmUtilityPage() {
         const path = location.pathname || '/';
         if (DMM_UTILITY_PATH_RE.test(path)) return true;
         return /\/dc\/[-_]\/mylibrary(?:\/|$)/i.test(path);
     }
- 
+
     function getDmmProductTitle() {
         let target = document.querySelector(DMM_PRODUCT_TITLE_SELECTOR);
         if (!target && DMM_PRODUCT_PATH_RE.test(location.pathname || '')) {
@@ -942,7 +986,7 @@
         if (target.closest('header, nav, footer, .breadcrumb, .navigation, .menu')) return null;
         return target;
     }
- 
+
     function isSafeToolbarTarget(target) {
         if (!target || target.nodeType !== 1) return false;
         if (target === document.body || target === document.documentElement) return false;
@@ -956,7 +1000,7 @@
         if (style && (style.position === 'fixed' || style.position === 'sticky')) return false;
         return true;
     }
- 
+
     function handleGoogleSearch() {
         if (!/^(?:www\.)?google\.[^/]+$/i.test(location.hostname)) return false;
         const rawQuery = new URLSearchParams(location.search).get('q') || '';
@@ -979,18 +1023,18 @@
             return false;
         }
     }
- 
+
     function handleSeiyaLogic() {
         if (!/seiya-saiga\.com$|sagaoz\.net$/i.test(location.hostname)) return false;
         const searchRaw = new URLSearchParams(location.search).get('cgsearch');
         if (!searchRaw || normalizeForMatch(searchRaw).length < MIN_FINGER_LENGTH) return false;
- 
+
         if (/save\.html/i.test(location.pathname)) {
             const match = findBestMatch(Array.from(document.querySelectorAll('tr, .save-list li, .game-list li')), searchRaw, .58);
             if (match) attachToolbar(match.element.querySelector('td[align="left"], .title, .name') || match.element, searchRaw, { inline: true, marker: 'data-cg-deep-added', highlight: true });
             return false;
         }
- 
+
         if (/(?:kouryaku\.html|galge\.html|\/game\.html$)/i.test(location.pathname)) {
             const links = Array.from(document.querySelectorAll('a[href]')).filter(link => /\.html(?:[?#]|$)/i.test(link.getAttribute('href') || ''));
             const match = findBestMatch(links, searchRaw, .58);
@@ -1006,21 +1050,23 @@
             location.replace(`https://www.google.com/search?q=${encodeURIComponent(`site:seiya-saiga.com ${searchRaw}`)}`);
             return true;
         }
- 
+
         const candidates = Array.from(document.querySelectorAll('h1, h2, h3, .title, .name, td[align="left"]'));
         const match = findBestMatch(candidates, searchRaw, .62);
         if (match) attachToolbar(match.element, searchRaw, { inline: true, marker: 'data-cg-deep-added', highlight: true });
         return false;
     }
- 
+
     const SITES = [
         {
             name: 'VNDB',
             check: () => /(?:^|\.)vndb\.org$/i.test(location.hostname) && /^\/v\d+/i.test(location.pathname),
             run: () => {
-                const target = document.querySelector('h1.vn-title, h1#page-title, main h1[lang], article h1[lang]') || findContentHeading('main h1, article h1');
-                const jp = document.querySelector('h2.alttitle[lang="ja"], [lang="ja"].alttitle, [data-lang="ja"], main h1[lang^="ja"]');
-                return getTitleItem(target, [jp, target, ...getMetaTitle()]);
+                const target = document.querySelector('h1.vn-title, h1#page-title') || findContentHeading('main h1, article h1');
+                const jp = findVndbJapaneseTitle();
+                // Keep the title heading as the mount point, but always use
+                // the explicit Japanese alternate title when VNDB provides it.
+                return getTitleItem(target || jp, [jp, target, ...getMetaTitle()]);
             }
         },
         {
@@ -1052,7 +1098,7 @@
                 const path = location.pathname || '/';
                 const input = document.querySelector('input[name="keyword"], input[name="q"], input[type="search"]');
                 const query = getQueryKeyword(['keyword', 'q']);
- 
+
                 // Modern 2DFan has a site-name h3 followed by the actual
                 // result/detail heading. Keep the search query as the source
                 // on result pages so `_2DFan` and page chrome never leak in.
@@ -1062,12 +1108,12 @@
                     const searchMount = input && (input.closest('form') || input.parentElement);
                     return getTitleItem(resultTitle || searchMount || document.querySelector('#content') || findContentMount(), [query]);
                 }
- 
+
                 if (/\/subjects\/\d+(?:\/|$)/i.test(path)) {
                     const title = findContentHeading('#content h3, h3.subject-title, .subject-title, .game-title, h1, h2');
                     return getTitleItem(title, [title]);
                 }
- 
+
                 // Preserve support for the older alias domains while avoiding
                 // the `site-name` heading and metadata-only fallbacks.
                 const target = findContentHeading('#content h3, h1, h2, h3.subject-title, .subject-title, .game-title, .title');
@@ -1236,7 +1282,7 @@
             }
         }
     ];
- 
+
     function main() {
         if (!document.body) return;
         ensureUiStyles();
@@ -1251,7 +1297,7 @@
         if (!isLikelyGameTitle(item.keyword)) return;
         attachToolbar(item.target, item.keyword, { before: site.name === 'VNDB' });
     }
- 
+
     let scheduled = false;
     function scheduleMain() {
         if (scheduled) return;
@@ -1260,7 +1306,7 @@
         if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
         else setTimeout(run, 80);
     }
- 
+
     if (document.body && typeof MutationObserver !== 'undefined') {
         const observer = new MutationObserver(scheduleMain);
         observer.observe(document.body, { childList: true, subtree: true });
