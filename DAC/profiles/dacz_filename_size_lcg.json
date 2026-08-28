@@ -1,0 +1,26 @@
+{
+  "schema_version": "1.0.0",
+  "profile_id": "dac_filename_size_lcg",
+  "display_name": "DAC filename+size LCG stream",
+  "engine_family": "DAC script layer",
+  "enabled": true,
+  "encrypted_exts": [".dacz", ".iniz"],
+  "decoded_ext_map": {".dacz": ".dac", ".iniz": ".ini"},
+  "filename_encoding": "cp932",
+  "algorithm": "filename_size_lcg",
+  "params": {
+    "const": "0x713E66EB",
+    "add": "0x71BD",
+    "lowercase_ascii_preserve_cp932": true,
+    "strip_final_z": true,
+    "use_basename": true,
+    "start_offset": 0
+  },
+  "probe": {
+    "min_score": 35,
+    "text_encoding_default": "cp932",
+    "positive_markers": [".call", ".include", "set_subtitle", "台詞", "選択肢", "//", "$."],
+    "negative_nul_ratio": 0.02
+  },
+  "notes": "No fixed per-game key is stored. The byte key is derived per file from normalized filename and current file size. Edit this profile or add another JSON profile for a variant engine."
+}
