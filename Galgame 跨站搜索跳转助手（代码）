@@ -1,28 +1,50 @@
 // ==UserScript==
 // @name         Galgame 跨站搜索跳转助手
-// @description  主要在 Galgame 数据库之间实现搜索跳转。
+// @description  在 Galgame 数据库、攻略站和资源站之间快速跳转搜索。
 // @namespace    http://tampermonkey.net/
-// @version      1.7
-// @author       Orchids
+// @version      1.9
+// @author       是幼微鸭mua
 // @match        https://vndb.org/*
+// @match        https://www.vndb.org/*
+// @match        https://moyu.moe/*
 // @match        https://www.moyu.moe/*
+// @match        https://ai2.moe/*
 // @match        https://www.ai2.moe/*
 // @match        https://bgm.tv/subject/*
+// @match        https://bgm.tv/subject_search/*
+// @match        https://www.bgm.tv/subject/*
+// @match        https://www.bgm.tv/subject_search/*
 // @match        https://bangumi.tv/subject/*
+// @match        https://bangumi.tv/subject_search/*
+// @match        https://www.bangumi.tv/subject/*
+// @match        https://www.bangumi.tv/subject_search/*
+// @match        https://chii.in/subject/*
+// @match        https://chii.in/subject_search/*
+// @match        https://www.chii.in/subject/*
+// @match        https://www.chii.in/subject_search/*
 // @match        https://2dfan.com/*
+// @match        https://www.2dfan.com/*
 // @match        https://2dfdf.de/*
 // @match        https://2dfmax.top/*
 // @match        https://fan2d.top/*
 // @match        https://galge.top/*
 // @match        https://e-hentai.org/*
+// @match        https://www.e-hentai.org/*
 // @match        https://exhentai.org/*
+// @match        https://www.exhentai.org/*
 // @match        https://ex.moonchan.xyz/*
 // @match        https://seiya-saiga.com/*
+// @match        https://www.seiya-saiga.com/*
 // @match        https://galge.seiya-saiga.com/*
 // @match        https://sagaoz.net/*
+// @match        https://www.sagaoz.net/*
 // @match        https://hitomi.la/*
+// @match        https://www.hitomi.la/*
 // @match        https://ggbases.dlgal.com/*
+// @match        https://www.ggbases.dlgal.com/*
 // @match        https://erogamescape.org/*
+// @match        https://www.erogamescape.org/*
+// @match        https://erogamescape.dyndns.org/*
 // @match        https://koko.kyara.top/*
 // @match        https://www.dlsite.com/*
 // @match        https://dlsoft.dmm.co.jp/*
@@ -31,411 +53,1219 @@
 // @match        https://www.dmm.co.jp/*
 // @match        https://sukebei.nyaa.si/*
 // @match        https://moepedia.net/*
+// @match        https://www.moepedia.net/*
 // @match        https://vgmdb.net/*
+// @match        https://www.vgmdb.net/*
+// @match        https://bishogedb.com/*
+// @match        https://www.bishogedb.com/*
 // @match        https://www.google.com/search*
 // @grant        none
+// @run-at       document-idle
+// @noframes
 // @license      MIT
-// @downloadURL https://update.greasyfork.org/scripts/561946/Galgame%20%E8%B7%A8%E7%AB%99%E6%90%9C%E7%B4%A2%E8%B7%B3%E8%BD%AC%E5%8A%A9%E6%89%8B.user.js
-// @updateURL https://update.greasyfork.org/scripts/561946/Galgame%20%E8%B7%A8%E7%AB%99%E6%90%9C%E7%B4%A2%E8%B7%B3%E8%BD%AC%E5%8A%A9%E6%89%8B.meta.js
 // ==/UserScript==
  
 (function () {
     'use strict';
  
-    const SYMBOL_GROUPS = [
-        { key: 'wave',      variants: ["~", "～", "〜", "〰", "∼", "⁓"] },
-        { key: 'cross',     variants: ["x", "X", "×", "✕", "✖", "✗", "✘", "⨉", "⨯"] },
-        { key: 'dot',       variants: [".", "·", "・", "●", "•", "．", "‧", "⋅", "∙"] },
-        { key: 'dash',      variants: ["-", "－", "—", "―", "–", "─", "−", "⁃"] },
-        { key: 'exclaim',   variants: ["!", "！", "❗", "❕", "‼", "⁉"] },
-        { key: 'question',  variants: ["?", "？", "❓", "❔", "⁇", "⁈"] },
-        { key: 'heart',     variants: ["♡", "♥", "❤", "💕", "💗", "💖", "💘", "💓", "💞", "❥", "❣"] },
-        { key: 'star',      variants: ["★", "☆", "✡", "✦", "✧", "⭐", "🌟", "＊", "*"] },
-        { key: 'music',     variants: ["♪", "♫", "♬", "♩", "🎵", "🎶", "🎼"] },
-        { key: 'colon',     variants: [":", "：", "∶", "꞉"] },
-        { key: 'semicolon', variants: [";", "；", "⁏"] },
-        { key: 'slash',     variants: ["/", "／", "∕", "⁄", "╱"] },
-        { key: 'equal',     variants: ["=", "＝", "═", "⩵", "⩶", "≡"] },
-        { key: 'parenL',    variants: ["(", "（", "❨", "﹙"] },
-        { key: 'parenR',    variants: [")", "）", "❩", "﹚"] },
-        { key: 'bracketL',  variants: ["[", "［", "【", "〔", "「", "『"] },
-        { key: 'bracketR',  variants: ["]", "］", "】", "〕", "」", "』"] },
-        { key: 'ellipsis',  variants: ["…", "⋯", "︙", "⁝", "..."] },
-        { key: 'quote',     variants: ["\"", "“", "”", "″", "＂", "«", "»"] },
-        { key: 'space',     variants: [" ", "\u3000", "_"] }
-    ];
+    const MAX_TITLE_LENGTH = 180;
+    const MIN_FINGER_LENGTH = 2;
+    const TOOLBAR_VERSION = '3.4';
+    const TITLE_CONTENT_RE = /[A-Za-z0-9\u00c0-\u024f\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f\u3005]/;
  
-    const SITE_PREFERENCES = {
-        "JAPANESE": {
-            wave: "～", cross: "×", dot: "・", dash: "－",
-            exclaim: "！", question: "？", heart: "♥", star: "★", music: "♪",
-            colon: "：", semicolon: "；", slash: "／", equal: "＝",
-            parenL: "（", parenR: "）", bracketL: "【", bracketR: "】",
-            ellipsis: "…", quote: "＂"
-        },
-        "GLOBAL": {
-            wave: "~", cross: "x", dot: ".", dash: "-",
-            exclaim: "!", question: "?", heart: " ", star: " ", music: " ",
-            colon: ":", semicolon: ";", slash: "/", equal: " ",
-            parenL: "(", parenR: ")", bracketL: "[", bracketR: "]",
-            ellipsis: "...", quote: "\""
-        }
-    };
+    // Page chrome and release labels should never become a search keyword by themselves.
+    const NOISE_EXACT = new Set([
+        '攻略', '攻略wiki', '存档', 'save', 'download', '下载', '下载资源', '资源',
+        '评论', '信息', '详情', '搜索', '搜索结果', '结果', '游戏', '作品', '页面',
+        '汉化', '汉化版', '汉化补丁', '补丁', '版', '版本', 'edition', '全cg', 'cg', '特典', '通常版',
+        '限定版', '完全版', '完整版', '修正版', '本体', '试玩', '演示', '导航',
+        'home', 'vndb', 'bangumi', '2dfan', 'moepedia', 'vgmdb', 'hitomi', 'bishogedb', 'びしょげdb'
+    ]);
+    const NOISE_SEGMENT_RE = /(?:攻略|存档|save|download|下载|资源|评论|信息|详情|汉化|補丁|补丁|全cg|特典|通常版|限定版|完全版|完整版|修正版|本体|试玩|演示|直链|网盘|磁力|种子|解压|免安装|攻略wiki|期間限定|特典付き?|DMM特典|FANZA特典|周年記念|キャンペーン|セール|予約|対応|対応版|日本語版|英語版|中文|简中|繁中|全年齢|18禁|R18|受賞|授賞|入賞|銀賞|金賞|銅賞|作品賞|ノミネート|提名|获奖|得奖|排行榜|ランキング|ランクイン|殿堂入り|\d{1,3}\s*[%％]?\s*(?:off|オフ|割引|discount|sale))/iu;
+    const PLATFORM_RE = /\b(?:windows?(?:\s*(?:xp|vista|7|8|10|11))?|win(?:dows)?|pc|mac(?:os)?|linux|android|ios|steam|switch|ps[345]|xbox|web|browser|dmm|dlsite|fanza|r18|18禁|全年龄)\b/gi;
+    const VERSION_RE = /(?:\b(?:ver(?:sion)?|v)\s*\d+(?:\.\d+){0,4}[a-z]?\b|\b\d+(?:\.\d+){1,4}\s*(?:版|版本)\b)/gi;
+    // Product pages append these labels to the actual title. Keep this list
+    // separate from title matching so a legitimate subtitle in parentheses is
+    // preserved unless it is clearly a release/platform marker.
+    const PLATFORM_LABEL_RE = /(?:^|[\s|｜:：,，;；·・])(?:for\s+)?(?:Windows?(?:\s*(?:XP|Vista|7|8|10|11))?|Win(?:dows)?|PC|Mac(?:OS)?|OS|Linux|Android|iOS|Steam|Switch|PS[345]|PSP|PSVita|Xbox|Web|Browser|DMM|FANZA|DLsite)(?:\s*\d+)?(?:\s*(?:対応|対応版|版|版本))?(?=$|[\s|｜:：,，;；·・])/giu;
+    const RELEASE_LABEL_RE = /(?:^|[\s|｜:：,，;；·・])(?:DL|DLC|ダウンロード|ダウンロード版|体験版|試用版|デモ|Demo|Trial|製品版|パッケージ版|通常|通常版|限定|限定版|特典|特典付き|特典付|初回特典|初回限定|期間限定|新装|新装版|廉価|廉価版|完全|完全版|完整|完整版|普及|普及版|本体|修正版|再販版|復刻版|豪華版|特別版|同梱版|セット版|バンドル|アペンド|追加パッチ|アップデート|対応|対応版|日本語|日本語版|英語|英語版|中文|中文補丁|中文补丁|汉化|漢化|简中|繁中|全年齢|R18|18禁|DMM特典|FANZA特典|周年記念|キャンペーン|セール|予約|無料|割引)(?=$|[\s|｜:：,，;；·・]|版|版本|付き|付)/giu;
+    // Some stores concatenate release labels directly to the title. Keep the
+    // old script's broad rules as a second pass for those forms ("PC版",
+    // "Windows10対応版", "DMM特典付き"), while the first pass remains
+    // boundary-aware for ordinary title text.
+    const ATTACHED_PLATFORM_RE = /(?:\s+for\s+)?(?:Windows|Win|PC|Mac|OS|XP|Vista)(?:\s*\d+)?(?:\s*対応)?(?=版|版本|対応|$)/giu;
+    const ATTACHED_RELEASE_RE = /(?:DL|対応|限定|特典付き?|通常|期間限定|新装|廉価|完整|本体|汉化|漢化|日本語)版/giu;
+    const ATTACHED_MARKETING_RE = /(?:期間限定|特典付き?|DMM特典|FANZA特典|周年記念|完整版|普及版|本体|修正版?)/giu;
+    const RESOURCE_LABEL_RE = /(?:^|[\s|｜:：,，;；·・])(?:全CG|CG回想|CG鑑賞|攻略(?:wiki)?|存档|セーブ|Save|下载资源|下载页面|资源页面|网盘|磁力|种子|直链|解压|免安装|绿色版|破解补丁|汉化补丁|漢化パッチ|补丁)(?=$|[\s|｜:：,，;；·・])/giu;
+    const PROMOTION_LABEL_RE = /(?:^|[\s|｜:：,，;；·・])(?:(?:最大|約|约|up\s*to)?\s*\d{1,3}\s*[%％]\s*(?:OFF|オフ|割引|discount|sale)|\d{1,3}\s*(?:[%％]\s*)?(?:OFF|オフ|割引|discount|sale)|(?:sale|セール|campaign|キャンペーン|セール中))(?=$|[\s|｜:：,，;；·・])/giu;
+    // Site templates often append a description to an otherwise usable title
+    // (for example: "鯤 Galgame 开源 Galgame 补丁 资源下载站"). Keep this
+    // filter global so every engine receives the same game-name-only keyword.
+    const SITE_DESCRIPTION_RE = /(?:[鲲鯤]\s*)?Galgame\s*(?:(?:开源|開源)\s*)?(?:Galgame\s*)?(?:补丁|補丁)(?:\s*(?:资源下载站|資源下載站|资源|資源))?/giu;
+    const SITE_TOKEN_RE = /(?:^|[\s|｜_＿\-–—:：·・])(?:2DFan|2DFan\.com|GGBases?|GGbase|Hitomi(?:\.la)?|Moyu|Moepedia|VNDB|VGMdb|Bishogedb|びしょげdb|DMM|FANZA|DLsite|Erogame(?:Scape)?|Sagaoz|Seiya(?:攻略|存档)?|Koko|kyara|Nyaa|Bangumi|BGM)(?=$|[\s|｜_＿\-–—:：·・])/giu;
+    const MARKETING_SEGMENT_RE = /(?:\d{1,3}\s*[%％]?\s*)?(?:ポイント(?:還元|バック|付与|対象)|(?:還元|返還)(?:実施中|中)?|特価|超特価|割引|セール|キャンペーン(?:中)?|期間限定|数量限定|予約受付中|発売記念|周年記念|購入特典|お買い得|最安値|価格比較|ランキング|人気商品)/iu;
+    const MARKETING_LABEL_RE = /(?:^|[\s|｜_＿:：,，;；·・])(?:\d{1,3}\s*[%％]\s*)?(?:ポイント(?:還元|バック|付与|対象)|(?:還元|返還)(?:実施中|中)?|特価|超特価|割引|セール|キャンペーン(?:中)?|期間限定|数量限定|予約受付中|発売記念|周年記念|購入特典|お買い得|最安値|価格比較|ランキング|人気商品)(?=$|[\s|｜_＿:：,，;；·・!！])/giu;
+    const BRACKET_RE = /(?:【([^】]{1,100})】|\[([^\]]{1,100})\])/g;
+    const PAREN_RE = /(?:（([^）]{1,100})）|\(([^)]{1,100})\))/g;
+    const SITE_SUFFIX_RE = /\s*(?:\||｜|·| - | – | — )\s*(?:vndb|bangumi|bgm|2dfan|moyu|ai2|moepedia|vgmdb|hitomi|bishogedb|びしょげdb|e[- ]?hentai|download|攻略|存档)\s*$/i;
+    const GENERIC_UI_TITLE_RE = /^(?:the\s+visual\s+novel\s+database|releases?|staff|characters?(?:\s+summary)?|user\s+stats|screenshots?|menu|home|login|register|search|search\s+results?|results?|loading|next|previous|page|首页|登录|注册|搜索|搜索结果|验证|安全验证|正在加载|加载中|请稍候)$/iu;
+    const CHALLENGE_TITLE_RE = /^(?:请稍候|正在进行安全验证|验证成功|checking\s+your\s+browser|just\s+a\s+moment|cloudflare|access\s+denied|verify\s+you\s+are\s+human|(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+){1,3})$/iu;
+    const SITE_BRAND_TITLE_RE = /^(?:e[-\s]?hentai|exhentai|hitomi(?:\.la)?|sukebei|nyaa|ggbases?|sagao[.．]?z|誠也の部屋|erogamescape|koko(?:\.kyara\.top)?|kyara|moepedia|vgmdb|bishogedb|びしょげdb|vndb|2dfan|ai2|moyu)(?:$|[\s:：|｜\-–—(（])/iu;
  
-    const ENGINE_SPECIFIC_RULES = {
-        "hitomi": { keep: "×", replaceWith: " " },
-        "eh": { keep: "×", replaceWith: " " },
-        "moonchan": { keep: "×・", replaceWith: " " },
-        "vndb": { keep: "×", replaceWith: " " },
-        "seiya": { keep: "×", replaceWith: " " },
-        "seiyasave": { keep: "×", replaceWith: " " },
-        "sagaoz": { keep: "×", replaceWith: " " },
-        "bgm": { keep: "×", replaceWith: " " },
-        "moyu": { keep: "×", replaceWith: " " },
-        "2dfan": { keep: "×", replaceWith: " " },
-        "ai2": { keep: "×", replaceWith: " " },
-        "dlsite": { keep: "×", replaceWith: " " },
-        "dmm": { keep: "×", replaceWith: " " },
-        "fanza": { keep: "×", replaceWith: " " },
-        "erogame": { keep: "×", replaceWith: " " },
-        "koko": { keep: "×", replaceWith: " " },
-        "ggbase": { keep: "ALL", replaceWith: "" },
-        "sukebei": { keep: "×", replaceWith: " " },
-        "moepedia": { keep: "×", replaceWith: " " },
-        "vgmdb": { keep: "×", replaceWith: " " }
-    };
+    // Query punctuation is deliberately data-driven. The old table treated the
+    // normal letter x/X as a cross, corrupting titles such as "Aokana" and "Xbox".
+    // Only non-ASCII cross glyphs are converted below.
+    const QUERY_PROFILES = Object.freeze({
+        default: Object.freeze({ preserveCross: true, preserveMiddleDot: false, preserveAll: false }),
+        moonchan: Object.freeze({ preserveCross: true, preserveMiddleDot: true, preserveAll: false }),
+        ggbase: Object.freeze({ preserveCross: true, preserveMiddleDot: true, preserveAll: true })
+    });
+    const ENGINE_QUERY_PROFILE = Object.freeze({ moonchan: 'moonchan', ggbase: 'ggbase' });
  
-    function toHalfWidth(str) {
-        if (!str) return "";
-        return str.replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/\u3000/g, ' ');
-    }
+    function normalizeQuerySymbols(value, profileName = 'default') {
+        const profile = QUERY_PROFILES[profileName] || QUERY_PROFILES.default;
+        let result = flattenText(value);
+        if (profile.preserveAll) return result.replace(/\s+/g, ' ').trim();
  
-    function adaptSymbols(str, targetStyle = "JAPANESE") {
-        if (!str) return "";
-        let result = str;
-        const pref = SITE_PREFERENCES[targetStyle] || SITE_PREFERENCES.JAPANESE;
-        if (targetStyle === "JAPANESE") { result = result.replace(/\s*[-－—]\s*/g, pref.dash); }
-        SYMBOL_GROUPS.forEach(group => {
-            const preferred = pref[group.key];
-            if (preferred !== undefined) {
-                group.variants.forEach(v => {
-                    if (v === " " || v === "\u3000") return;
-                    try { result = result.split(v).join(preferred); } catch (e) { void e; }
-                });
-            }
-        });
-        return result;
-    }
- 
-    function hasJapanese(str) { return /[\u3040-\u30ff]/.test(str); }
- 
-    function normalizeForMatch(str) {
-        if (!str) return "";
-        let s = adaptSymbols(toHalfWidth(str).toLowerCase(), "GLOBAL");
-        return s.replace(/[^\u4e00-\u9fa5\u3040-\u30ff\u31f0-\u31ff\u3005a-z0-9]/g, '')
-            .replace(/\s+/g, '')
-            .replace(/誠也の部屋|攻略|游戏|版|修正/g, '');
-    }
- 
-    function getSmartKeyword(input, engineType) {
-        if (!input) return "";
-        let kw = input.trim();
-        kw = kw.replace(/[Ａ-Ｚａ-ｚ０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0));
-        kw = kw.replace(/[\r\n\u200B-\u200D\uFEFF]/g, " ").replace(/\s+/g, " ");
-        kw = kw.replace(/[@＠]/g, ' '); 
-        kw = kw.replace(/[&?]_(?:gl|ga).*$/gi, '');
-        kw = kw.replace(/[?&]utm_.*?=.*?(&|$)/gi, '');
-        kw = kw.replace(/【.*?】|\[.*?\]|\(.*?\)|「.*?」|『.*?』/g, ' ');
-        
-        kw = kw.replace(/(?:\s+for\s+)?(?:Windows|Win|PC|Mac|OS|XP|Vista)(?:\s*\d+)?(?:\s*対応)?版?/gi, ' ');
-        kw = kw.replace(/(?:DL|対応|限定|特典付き?|通常|期間限定|新装|廉価|完整|本体|汉化|日本語)版/gi, ' ');
-        kw = kw.replace(/(?:期間限定|特典付き?|DMM特典|周年記念|完整版|普及版|本体|修正版?)/gi, ' ');
-        
-        const rule = ENGINE_SPECIFIC_RULES[engineType] || { keep: "", replaceWith: " " };
-        if (rule.keep !== "ALL") {
-            const keepChars = rule.keep || "";
-            SYMBOL_GROUPS.forEach(group => {
-                if (group.key === 'space') return;
-                let charToPreserve = [...keepChars].find(c => group.variants.includes(c));
-                let replacement = charToPreserve ? charToPreserve : rule.replaceWith;
-                group.variants.forEach(v => {
-                    kw = kw.split(v).join(replacement);
-                });
-            });
-        }
-        
-        return kw.replace(/\u3000/g, ' ').replace(/\s+/g, ' ').trim();
+        result = result
+            .replace(/[×✕✖✗✘⨉⨯]/gu, profile.preserveCross ? '×' : ' ')
+            .replace(/[·・●•‧⋅∙]/gu, profile.preserveMiddleDot ? '・' : ' ')
+            .replace(/[~～〜〰∼⁓]/gu, ' ')
+            .replace(/[.．…⋯︙⁝]/gu, ' ')
+            .replace(/[-－—―–─−⁃]/gu, ' ')
+            .replace(/[!！❗❕‼⁉?？❓❔⁇⁈]/gu, ' ')
+            .replace(/[♡♥❤💕💗💖💘💓💞❥❣★☆✡✦✧⭐🌟＊*♪♫♬♩🎵🎶🎼]/gu, ' ')
+            .replace(/[:：∶꞉;；⁏/／∕⁄╱=＝═⩵⩶≡]/gu, ' ')
+            .replace(/[()[\]（）❨❩﹙﹚［］【】〔〕「」『』]/gu, ' ')
+            .replace(/["“”″＂«»]/gu, ' ')
+            .replace(/[^\p{L}\p{N}\s×・'&]/gu, ' ');
+        return result.replace(/\s+/g, ' ').trim();
     }
  
     const ENGINES = {
-        "hitomi":   { name: "Hitomi", bg: "#F06292", url: "https://hitomi.la/search.html?" },
-        "moonchan": { name: "Ex",   bg: "#424242", url: "https://ex.moonchan.xyz/?f_search=" },
-        "eh":       { name: "EH",     bg: "#5C4033", url: "https://e-hentai.org/?f_search=" },
-        "vndb":     { name: "VNDB",   bg: "#513535", url: "https://vndb.org/v?sq=" },
-        "seiya":    { name: "Seiya攻略", bg: "#2196F3", url: "https://seiya-saiga.com/game/kouryaku.html?cgsearch=" },
-        "seiyasave":{ name: "Seiya存档", bg: "#673AB7", url: "https://seiya-saiga.com/save.html?cgsearch=" },
-        "sagaoz":   { name: "Sagaoz攻略", bg: "#1B5E20", url: "https://sagaoz.net/foolmaker/game.html?cgsearch=" },
-        "bgm":      { name: "BGM",    bg: "#F09199", url: "https://bgm.tv/subject_search/" },
-        "moyu":     { name: "Moyu",   bg: "#00BCD4", url: "https://www.moyu.moe/search?q=" },
-        "2dfan":    { name: "2DFan",  bg: "#4CAF50", url: "https://2dfan.com/subjects/search?keyword=" },
-        "ai2":      { name: "Ai2",    bg: "#9C27B0", url: "https://www.ai2.moe/search/?q=" },
-        "dlsite":   { name: "DLsite", bg: "#2196F3", url: "https://www.dlsite.com/pro/fsr/=/keyword/" },
-        "dmm":      { name: "DMM",    bg: "#FF9800", url: "https://www.dmm.com/search/=/searchstr=" },
-        "fanza":    { name: "Fanza",  bg: "#E65100", url: "https://dlsoft.dmm.co.jp/search/?service=pcgame&searchstr=" },
-        "erogame":  { name: "Erogame",bg: "#607D8B", url: "https://erogamescape.org/~ap2/ero/toukei_kaiseki/kensaku.php?category=game&word_category=name&mode=normal&word=" },
-        "koko":     { name: "kyara",   bg: "#455A64", url: "https://koko.kyara.top/kensaku.php?category=game&word_category=name&mode=normal&word=" },
-        "ggbase":   { name: "GGbase", bg: "#FF9800", url: "https://ggbases.dlgal.com/search.so?title=" },
-        "sukebei":  { name: "Nyaa",bg: "#3F51B5", url: "https://sukebei.nyaa.si/?f=0&c=0_0&q=" },
-        "moepedia": { name: "Moepedia", bg: "#FF69B4", url: "https://moepedia.net/search/result/?s=" },
-        "vgmdb":    { name: "VGMdb", bg: "#263238", url: "https://vgmdb.net/search?q=" }
+        hitomi: { name: 'Hitomi', bg: '#F06292', url: 'https://hitomi.la/search.html?' },
+        moonchan: { name: 'Ex', bg: '#424242', url: 'https://ex.moonchan.xyz/?f_search=' },
+        eh: { name: 'EH', bg: '#5C4033', url: 'https://e-hentai.org/?f_search=' },
+        vndb: { name: 'VNDB', bg: '#513535', url: 'https://vndb.org/v?sq=' },
+        seiya: { name: 'Seiya攻略', bg: '#2196F3', url: 'https://seiya-saiga.com/game/kouryaku.html?cgsearch=' },
+        seiyasave: { name: 'Seiya存档', bg: '#673AB7', url: 'https://seiya-saiga.com/save.html?cgsearch=' },
+        sagaoz: { name: 'Sagaoz攻略', bg: '#1B5E20', url: 'https://sagaoz.net/foolmaker/game.html?cgsearch=' },
+        bgm: { name: 'BGM', bg: '#F09199', url: 'https://bgm.tv/subject_search/' },
+        moyu: { name: 'Moyu', bg: '#00BCD4', url: 'https://www.moyu.moe/search?q=' },
+        '2dfan': { name: '2DFan', bg: '#4CAF50', url: 'https://2dfan.com/subjects/search?keyword=' },
+        ai2: { name: 'Ai2', bg: '#9C27B0', url: 'https://www.ai2.moe/search/?q=' },
+        dlsite: { name: 'DLsite', bg: '#2196F3', url: 'https://www.dlsite.com/pro/fsr/=/keyword/' },
+        dmm: { name: 'DMM', bg: '#FF9800', url: 'https://www.dmm.com/search/=/searchstr=' },
+        fanza: { name: 'Fanza', bg: '#E65100', url: 'https://dlsoft.dmm.co.jp/search/?service=pcgame&searchstr=' },
+        erogame: { name: 'Erogame', bg: '#607D8B', url: 'https://erogamescape.org/~ap2/ero/toukei_kaiseki/kensaku.php?category=game&word_category=name&mode=normal&word=' },
+        koko: { name: 'kyara', bg: '#455A64', url: 'https://koko.kyara.top/kensaku.php?category=game&word_category=name&mode=normal&word=' },
+        ggbase: { name: 'GGbase', bg: '#FF9800', url: 'https://ggbases.dlgal.com/search.so?title=' },
+        sukebei: { name: 'Nyaa', bg: '#3F51B5', url: 'https://sukebei.nyaa.si/?f=0&c=0_0&q=' },
+        moepedia: { name: 'Moepedia', bg: '#FF69B4', url: 'https://moepedia.net/search/result/?s=' },
+        vgmdb: { name: 'VGMdb', bg: '#263238', url: 'https://vgmdb.net/search?q=' },
+        bishogedb: { name: 'Bishogedb', bg: '#1976D2', url: 'https://bishogedb.com/search?q=' }
     };
+    const ENGINE_ORDER = ['hitomi', 'moonchan', 'eh', 'moepedia', 'vndb', 'bgm', 'erogame', 'koko', 'seiya', 'seiyasave', 'sagaoz', 'moyu', 'ai2', '2dfan', 'dlsite', 'dmm', 'fanza', 'ggbase', 'sukebei', 'vgmdb', 'bishogedb'];
+    const ENGINE_HOSTS = {
+        hitomi: /(?:^|\.)hitomi\.la$/i,
+        moonchan: /(?:^|\.)moonchan\.xyz$/i,
+        eh: /(?:^|\.)(?:e-hentai|exhentai)\.org$/i,
+        vndb: /(?:^|\.)vndb\.org$/i,
+        seiya: /(?:^|\.)seiya-saiga\.com$/i,
+        sagaoz: /(?:^|\.)sagaoz\.net$/i,
+        bgm: /^(?:www\.)?(?:bgm|bangumi)\.tv$|^(?:www\.)?chii\.in$/i,
+        moyu: /(?:^|\.)moyu\.moe$/i,
+        '2dfan': /(?:2dfan|2dfdf|2dfmax|fan2d|galge)\.(?:com|de|top)$/i,
+        ai2: /(?:^|\.)ai2\.moe$/i,
+        dlsite: /(?:^|\.)dlsite\.com$/i,
+        dmm: /^www\.dmm\.(?:com|co\.jp)$/i,
+        fanza: /^dlsoft\.dmm\.(?:com|co\.jp)$/i,
+        erogame: /(?:^|\.)(?:erogamescape\.org|erogamescape\.dyndns\.org)$/i,
+        koko: /(?:^|\.)kyara\.top$/i,
+        ggbase: /(?:^|\.)dlgal\.com$/i,
+        sukebei: /(?:^|\.)nyaa\.si$/i,
+        moepedia: /(?:^|\.)moepedia\.net$/i,
+        vgmdb: /(?:^|\.)vgmdb\.net$/i,
+        bishogedb: /^(?:www\.)?bishogedb\.com$/i
+    };
+ 
+    const UI_STYLE_ID = 'cg-search-ui-style';
+    const UI_CSS = `
+        /* Hide an older copy immediately; it may otherwise remain over the host layout. */
+        .cg-search-toolbar:not([data-cg-toolbar-version="${TOOLBAR_VERSION}"]) {
+            display: none !important;
+        }
+        .cg-search-toolbar {
+            display: block !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            height: auto !important;
+            margin: 7px 0 !important;
+            padding: 0 !important;
+            position: static !important;
+            float: none !important;
+            clear: both !important;
+            z-index: auto !important;
+            overflow: visible !important;
+            background: transparent !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            pointer-events: auto !important;
+            line-height: 1.2 !important;
+        }
+        .cg-search-slot {
+            display: block !important;
+            box-sizing: border-box !important;
+            width: auto !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            min-height: 0 !important;
+            height: auto !important;
+            margin: 8px var(--cg-slot-margin-right, 0px) 8px var(--cg-slot-margin-left, 0px) !important;
+            padding: 0 !important;
+            position: static !important;
+            float: none !important;
+            clear: both !important;
+            overflow: visible !important;
+            background: transparent !important;
+            border: 0 !important;
+        }
+        .cg-search-slot > .cg-search-toolbar {
+            margin: 0 !important;
+        }
+        .cg-search-toolbar.cg-search-toolbar--inline {
+            display: block !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 5px 0 !important;
+            padding: 0 !important;
+        }
+        .cg-search-toolbar__toggle {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+            min-width: 64px !important;
+            min-height: 26px !important;
+            margin: 0 !important;
+            padding: 2px 8px !important;
+            color: #fff !important;
+            background: #4b5563 !important;
+            border: 1px solid rgba(0, 0, 0, .22) !important;
+            border-radius: 4px !important;
+            font: 600 12px/20px sans-serif !important;
+            white-space: nowrap !important;
+            cursor: pointer !important;
+            pointer-events: auto !important;
+        }
+        .cg-search-toolbar__toggle:hover,
+        .cg-search-toolbar__toggle:focus-visible {
+            background: #374151 !important;
+            outline: 2px solid currentColor !important;
+            outline-offset: 1px !important;
+        }
+        .cg-search-toolbar__panel {
+            display: flex !important;
+            flex-flow: row wrap !important;
+            align-items: center !important;
+            gap: 3px !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 5px 0 0 !important;
+            padding: 5px !important;
+            position: static !important;
+            float: none !important;
+            clear: both !important;
+            overflow: visible !important;
+            background: rgba(0, 0, 0, .035) !important;
+            border: 1px solid rgba(127, 127, 127, .22) !important;
+            border-radius: 5px !important;
+        }
+        .cg-search-toolbar__panel[hidden] {
+            display: none !important;
+        }
+        .cg-search-toolbar__button {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-sizing: border-box !important;
+            flex: 0 0 auto !important;
+            max-width: 100% !important;
+            min-height: 20px !important;
+            margin: 0 !important;
+            padding: 1px 6px !important;
+            color: #fff !important;
+            background-color: var(--cg-engine-bg) !important;
+            border: 0 !important;
+            border-radius: 3px !important;
+            font: 500 11px/18px sans-serif !important;
+            text-decoration: none !important;
+            white-space: nowrap !important;
+            cursor: pointer !important;
+            pointer-events: auto !important;
+            opacity: 1 !important;
+            transition: filter .16s ease !important;
+        }
+        .cg-search-toolbar__button:hover,
+        .cg-search-toolbar__button:focus-visible {
+            filter: brightness(.86) !important;
+            outline: 2px solid currentColor !important;
+            outline-offset: 1px !important;
+        }
+        @media (max-width: 560px) {
+            .cg-search-toolbar__button {
+                padding-inline: 5px !important;
+                font-size: 10px !important;
+            }
+        }
+    `;
+ 
+    function ensureUiStyles() {
+        const existing = document.getElementById(UI_STYLE_ID);
+        if (existing && existing.getAttribute('data-cg-style-version') === TOOLBAR_VERSION) return;
+        if (existing) existing.remove();
+        const style = document.createElement('style');
+        style.id = UI_STYLE_ID;
+        style.setAttribute('data-cg-style-version', TOOLBAR_VERSION);
+        style.textContent = UI_CSS;
+        (document.head || document.documentElement).appendChild(style);
+    }
+ 
+    const entityDecoder = document.createElement('textarea');
+ 
+    function decodeEntities(value) {
+        entityDecoder.innerHTML = String(value || '');
+        return entityDecoder.value;
+    }
+ 
+    function textFromElement(element) {
+        if (!element) return '';
+        if (element instanceof HTMLMetaElement) return element.content || '';
+        if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return element.value || '';
+        return element.innerText || element.textContent || '';
+    }
+ 
+    function replaceControlCharacters(value) {
+        return Array.from(String(value || ''), character => {
+            const code = character.codePointAt(0);
+            return (code <= 0x08 || (code >= 0x0b && code <= 0x0c) || (code >= 0x0e && code <= 0x1f) || code === 0x7f)
+                ? ' '
+                : character;
+        }).join('');
+    }
+ 
+    function flattenText(value) {
+        return replaceControlCharacters(decodeEntities(String(value || '')))
+            .replace(/<br\s*\/?\s*>/gi, ' ')
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/[\u200b-\u200d\ufeff]/g, ' ')
+            .normalize('NFKC');
+    }
+ 
+    function compactForNoise(value) {
+        return flattenText(value).toLowerCase().replace(/[^a-z0-9\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f]/g, '');
+    }
+ 
+    function isNoiseSegment(value) {
+        const raw = flattenText(value).trim();
+        const compact = compactForNoise(value);
+        if (!compact) return true;
+        if (NOISE_EXACT.has(compact)) return true;
+        if (/^(?:(?:最大|約|约|up\s*to)?\s*\d{1,3}\s*[%％]?\s*(?:off|オフ|割引|discount|sale)|(?:sale|セール|campaign|キャンペーン|セール中))$/iu.test(raw)) return true;
+        if (MARKETING_SEGMENT_RE.test(raw)) return true;
+        if (/^(?:pc|win|windows|mac|linux|android|ios|steam|switch|ps[345]|xbox|web|r18|18禁|全年龄|版|版本|edition|v?\d+(?:\.\d+)*)(?:版|版本|edition)?$/i.test(compact)) return true;
+        if (/^(?:pc|win|windows|mac|linux|android|ios|steam|switch|ps[345]|xbox|web|r18|18禁|全年龄|汉化|中文|简中|繁中|官方|下载|资源|攻略|存档|save|patch|补丁)(?:版|版本|edition|补丁)?$/i.test(compact)) return true;
+        return compact.length <= 48 && NOISE_SEGMENT_RE.test(compact);
+    }
+ 
+    function stripMetadata(value) {
+        let result = flattenText(value).replace(/\s+/g, ' ').trim();
+        if (!result) return '';
+        result = result.replace(SITE_DESCRIPTION_RE, ' ');
+        result = result.replace(SITE_TOKEN_RE, ' ');
+        result = result.replace(BRACKET_RE, (whole, fullWidth, ascii) => isNoiseSegment(fullWidth || ascii) ? ' ' : whole);
+        result = result.replace(PAREN_RE, (whole, fullWidth, ascii) => isNoiseSegment(fullWidth || ascii) ? ' ' : whole);
+        result = result.replace(/(?:誠也の部屋|下载资源|下载页面|资源页面|游戏攻略|攻略页面|存档页面)/gi, ' ');
+        // This filter is shared by every source site. It removes release,
+        // platform, shop and resource labels before matching or URL encoding.
+        result = result.replace(PLATFORM_LABEL_RE, ' ');
+        result = result.replace(RELEASE_LABEL_RE, ' ');
+        result = result.replace(ATTACHED_PLATFORM_RE, ' ');
+        result = result.replace(ATTACHED_RELEASE_RE, ' ');
+        result = result.replace(ATTACHED_MARKETING_RE, ' ');
+        result = result.replace(RESOURCE_LABEL_RE, ' ');
+        result = result.replace(PROMOTION_LABEL_RE, ' ');
+        result = result.replace(MARKETING_LABEL_RE, ' ');
+        result = result.replace(PLATFORM_RE, ' ');
+        result = result.replace(VERSION_RE, ' ');
+        result = result.replace(/\b(?:final|trial|demo|patch|portable|repack|complete|edition|special|limited|remastered|uncensored|digital|retail)\b/gi, ' ');
+        result = result.replace(/(?:全CG|CG回想|CG鑑賞|汉化补丁|中文补丁|破解补丁|免安装版|绿色版|完整版|完整漢化|修正版|特典付き|特典付|通常版|限定版|廉価版|普及版|本体|攻略|存档|下载|资源|ダウンロード|体験版|製品版|対応版)(?=$|[\s|｜:：\-–—])/giu, ' ');
+        // Remove orphaned suffixes left by a token such as "PC版".
+        result = result.replace(/(?:^|[\s|｜:：,，;；·・])(?:版|版本|対応|対応版|付き|付)(?=$|[\s|｜:：,，;；·・])/giu, ' ');
+        result = result.replace(SITE_SUFFIX_RE, ' ');
+        result = result.replace(/\s*[|｜]\s*$/g, ' ');
+        result = result.replace(/\s*[-–—]+\s*$/g, ' ');
+        return result.replace(/\s+/g, ' ').trim();
+    }
+ 
+    function cleanGameTitle(value) {
+        let result = stripMetadata(value);
+        if (!result) return '';
+        result = result.replace(/^[\s|｜:：,，;；·•~～\-–—]+|[\s|｜:：,，;；·•~～\-–—]+$/g, '').trim();
+        if (result.length > MAX_TITLE_LENGTH) {
+            const parts = result.split(/\s{2,}|\s*[|｜]\s*/).map(part => part.trim()).filter(Boolean);
+            // Do not call isLikelyGameTitle() here: it calls cleanGameTitle()
+            // itself, so a long page heading could recurse indefinitely.
+            const usable = parts.find(part => {
+                const candidate = part.trim();
+                const finger = normalizeForMatch(candidate);
+                return candidate.length <= MAX_TITLE_LENGTH
+                    && finger.length >= MIN_FINGER_LENGTH
+                    && TITLE_CONTENT_RE.test(candidate)
+                    && !NOISE_EXACT.has(finger)
+                    && !GENERIC_UI_TITLE_RE.test(candidate)
+                    && !CHALLENGE_TITLE_RE.test(candidate)
+                    && !SITE_BRAND_TITLE_RE.test(candidate);
+            });
+            result = usable || result.slice(0, MAX_TITLE_LENGTH);
+        }
+        return result.slice(0, MAX_TITLE_LENGTH).trim();
+    }
+ 
+    function normalizeForMatch(value) {
+        const cleaned = stripMetadata(value).toLowerCase();
+        return cleaned.replace(/[^a-z0-9\u00c0-\u024f\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f\u3005]/g, '');
+    }
+ 
+    function tokenizeTitle(value) {
+        return cleanGameTitle(value).toLowerCase()
+            .split(/[^a-z0-9\u00c0-\u024f\u0370-\u03ff\u1f00-\u1fff\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0400-\u052f]+/i)
+            .filter(token => token.length > 1 && !NOISE_EXACT.has(token));
+    }
+ 
+    function diceCoefficient(left, right) {
+        if (!left || !right) return 0;
+        if (left === right) return 1;
+        if (left.length < 2 || right.length < 2) return 0;
+        const pairs = new Map();
+        for (let i = 0; i < left.length - 1; i++) pairs.set(left.slice(i, i + 2), (pairs.get(left.slice(i, i + 2)) || 0) + 1);
+        let overlap = 0;
+        for (let i = 0; i < right.length - 1; i++) {
+            const pair = right.slice(i, i + 2);
+            const count = pairs.get(pair) || 0;
+            if (count > 0) { pairs.set(pair, count - 1); overlap++; }
+        }
+        return (2 * overlap) / (left.length + right.length - 2);
+    }
+ 
+    function scoreTitleMatch(query, candidate) {
+        const q = normalizeForMatch(query);
+        const c = normalizeForMatch(candidate);
+        if (q.length < MIN_FINGER_LENGTH || c.length < MIN_FINGER_LENGTH) return 0;
+        if (q === c) return 1;
+        const shorter = q.length <= c.length ? q : c;
+        const longer = q.length <= c.length ? c : q;
+        let score = 0;
+        if (longer.includes(shorter)) {
+            const ratio = shorter.length / longer.length;
+            score = 0.52 + Math.min(0.45, ratio * 0.45);
+            if (shorter.length < 3) score -= 0.18;
+        }
+        const qTokens = new Set(tokenizeTitle(query));
+        const cTokens = new Set(tokenizeTitle(candidate));
+        if (qTokens.size && cTokens.size) {
+            let overlap = 0;
+            qTokens.forEach(token => { if (cTokens.has(token)) overlap++; });
+            score = Math.max(score, (overlap / Math.max(qTokens.size, cTokens.size)) * 0.88);
+        }
+        score = Math.max(score, diceCoefficient(q, c) * 0.82);
+        return Math.min(1, score);
+    }
+ 
+    function isVisible(element) {
+        if (!element || element.nodeType !== 1) return false;
+        const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+        if (style && (style.display === 'none' || style.visibility === 'hidden')) return false;
+        return element.offsetParent !== null || element.getClientRects().length > 0;
+    }
+ 
+    function isLikelyGameTitle(value) {
+        const text = cleanGameTitle(value);
+        const finger = normalizeForMatch(text);
+        if (!text || finger.length < MIN_FINGER_LENGTH || text.length > MAX_TITLE_LENGTH) return false;
+        if (!TITLE_CONTENT_RE.test(text) || NOISE_EXACT.has(finger)) return false;
+        if (GENERIC_UI_TITLE_RE.test(text) || CHALLENGE_TITLE_RE.test(text) || SITE_BRAND_TITLE_RE.test(text)) return false;
+        if (/(?:https?:\/\/|www\.|@)/i.test(text)) return false;
+        return true;
+    }
+ 
+    function getTitleFromSource(source) {
+        if (!source) return '';
+        if (typeof source === 'string') return cleanGameTitle(source);
+        return cleanGameTitle(textFromElement(source));
+    }
+ 
+    function chooseTitle(sources) {
+        for (const source of sources || []) {
+            const title = getTitleFromSource(source);
+            if (isLikelyGameTitle(title)) return title;
+        }
+        return '';
+    }
+ 
+    function getMetaTitle() {
+        return [document.querySelector('meta[property="og:title"]'), document.querySelector('meta[name="twitter:title"]'), document.title];
+    }
+ 
+    function getQueryKeyword(names) {
+        const params = new URLSearchParams(location.search);
+        for (const name of names || []) {
+            const value = params.get(name);
+            if (value && isLikelyGameTitle(value)) return cleanGameTitle(value);
+        }
+        return '';
+    }
+ 
+    function getPathKeyword(prefix) {
+        if (!location.pathname.startsWith(prefix)) return '';
+        const encoded = location.pathname.slice(prefix.length).split('/')[0];
+        if (!encoded) return '';
+        try { return cleanGameTitle(decodeURIComponent(encoded.replace(/\+/g, ' '))); } catch { return ''; }
+    }
+ 
+    function elementIsUsableCandidate(element) {
+        if (!element || !isVisible(element)) return false;
+        const tag = element.tagName && element.tagName.toLowerCase();
+        if (/^(script|style|noscript|svg|path|input|textarea|select|option|button)$/i.test(tag)) return false;
+        const marker = `${element.id || ''} ${element.className || ''}`;
+        if (/(?:breadcrumb|pagination|comment|author|avatar|navbar|nav-|menu|footer|header|site-name|logo|tag-list|category)/i.test(marker)) return false;
+        return true;
+    }
+ 
+    function findBestMatch(elements, query, minimum = 0.6) {
+        const seen = new Set();
+        let best = null;
+        for (const element of elements || []) {
+            if (seen.has(element) || !elementIsUsableCandidate(element)) continue;
+            seen.add(element);
+            const title = getTitleFromSource(element);
+            if (!isLikelyGameTitle(title)) continue;
+            const score = scoreTitleMatch(query, title);
+            if (score < minimum || (best && score <= best.score)) continue;
+            best = { element, keyword: title, score };
+        }
+        return best;
+    }
+ 
+    function findContentHeading(selector) {
+        return Array.from(document.querySelectorAll(selector || 'h1, h2, h3')).find(element => {
+            if (!isSafeToolbarTarget(element) || !isVisible(element)) return false;
+            return isLikelyGameTitle(getTitleFromSource(element));
+        }) || null;
+    }
+ 
+    function getSmartKeyword(input, engineType) {
+        let keyword = cleanGameTitle(input);
+        if (!keyword) return '';
+        keyword = keyword.replace(/[@＠]/g, ' ').replace(/[&?]_(?:gl|ga).*$/i, '');
+        keyword = keyword.replace(/[?&]utm_[^&=]+=[^&]*/gi, ' ');
+        return normalizeQuerySymbols(keyword, ENGINE_QUERY_PROFILE[engineType] || 'default');
+    }
+ 
+    function buildSearchUrl(type, keyword) {
+        const engine = ENGINES[type];
+        const searchWord = getSmartKeyword(keyword, type);
+        if (!engine || !searchWord || searchWord.length < MIN_FINGER_LENGTH) return '';
+        let encoded;
+        if (type === 'dlsite') {
+            const dlsiteWord = searchWord.replace(/[!！?？*＊~～]/g, ' ').replace(/\s+/g, ' ').trim();
+            encoded = encodeURIComponent(dlsiteWord).replace(/%20/g, '+');
+        } else {
+            encoded = encodeURIComponent(searchWord);
+        }
+        let url = engine.url + encoded;
+        if (type === 'bgm') url += '?cat=all';
+        return url;
+    }
+ 
+    function hostMatchesEngine(type) {
+        const matcher = ENGINE_HOSTS[type];
+        return !!(matcher && matcher.test(location.hostname));
+    }
+ 
+    function shouldSkipEngine(type) {
+        if (type === 'dmm' && /^www\.dmm\.(?:com|co\.jp)$/i.test(location.hostname)) return true;
+        if (type === 'fanza' && /^dlsoft\.dmm\.(?:com|co\.jp)$/i.test(location.hostname)) return true;
+        if (type === 'seiya' && /seiya-saiga\.com$/i.test(location.hostname) && /(?:kouryaku\.html|galge\.html)/i.test(location.pathname)) return true;
+        if (type === 'seiyasave' && /seiya-saiga\.com$/i.test(location.hostname) && /save\.html/i.test(location.pathname)) return true;
+        if (type === 'sagaoz' && /sagaoz\.net$/i.test(location.hostname)) return true;
+        return hostMatchesEngine(type);
+    }
  
     function createBtn(keyword, type) {
         const engine = ENGINES[type];
-        let searchWord = getSmartKeyword(keyword, type);
-        if (!searchWord || searchWord.length < 2) return null;
+        const finalUrl = buildSearchUrl(type, keyword);
+        if (!engine || !finalUrl) return null;
+        const link = document.createElement('a');
+        link.href = finalUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'cg-search-toolbar__button';
+        link.style.setProperty('--cg-engine-bg', engine.bg);
+        link.setAttribute('data-cg-btn', 'true');
+        link.setAttribute('aria-label', `在 ${engine.name} 搜索 ${getSmartKeyword(keyword, type)}`);
+        link.title = link.getAttribute('aria-label');
+        link.textContent = `🔍 ${engine.name}`;
+        link.addEventListener('mouseenter', () => { link.style.filter = 'brightness(.85)'; });
+        link.addEventListener('mouseleave', () => { link.style.filter = 'none'; });
+        link.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            window.open(finalUrl, '_blank', 'noopener');
+        });
+        return link;
+    }
  
-        const a = document.createElement('a');
-        let encoded = encodeURIComponent(searchWord);
-        if (type === 'dlsite') {
-            let dlsWord = searchWord.replace(/[!！?？*＊~～]/g, ' ').trim();
-            encoded = encodeURIComponent(dlsWord).replace(/%20/g, '+');
+    const MAIN_ROOT_SELECTORS = [
+        '#main', 'main', '[role="main"]', '#content', '#contents', '#root', '#app',
+        '#application', '#__nuxt', '#__next', '[data-reactroot]', '.app-root', '.app-container',
+        '.main-content', '.content-main', '.page-content', '.entry-content', '.site-content'
+    ];
+    const SIDEBAR_MARKER_RE = /(?:^|[\s_-])(?:left|right)[-_]?(?:menu|sidebar|nav)|(?:^|[\s_-])(?:sidebar|side-menu|sidemenu|navbar|navigation|global-nav|site-nav)(?:$|[\s_-])/i;
+    const ROOT_MARKER_RE = /(?:^|[\s_-])(?:main|content|entry|article|work|game|detail|product|app|root|page|layout)(?:$|[\s_-])/i;
+ 
+    function isSidebarLike(element) {
+        if (!element || element.nodeType !== 1) return false;
+        const marker = `${element.id || ''} ${typeof element.className === 'string' ? element.className : ''}`;
+        return SIDEBAR_MARKER_RE.test(marker) || /^(?:header|nav|aside|footer)$/i.test(element.tagName || '');
+    }
+ 
+    function findMainRoot(target) {
+        for (const selector of MAIN_ROOT_SELECTORS) {
+            const roots = Array.from(document.querySelectorAll(selector));
+            const self = roots.find(candidate => candidate === target && !isSidebarLike(candidate));
+            if (self) return self;
+            const root = roots.find(candidate => candidate !== target && candidate.contains(target) && !isSidebarLike(candidate));
+            if (root) return root;
         }
-        let finalUrl = engine.url + encoded;
-        if (type === 'bgm') finalUrl += "?cat=all";
-        a.href = finalUrl;
-        a.target = '_blank';
-        a.setAttribute('data-cg-btn', 'true');
-        a.style.cssText = `display:inline-block !important; margin:1px !important; padding:0 6px !important; font-size:10px !important; color:#fff !important; background-color:${engine.bg} !important; border-radius:3px !important; text-decoration:none !important; line-height:16px !important; vertical-align:middle !important; border:none !important; white-space:nowrap !important; cursor:pointer !important; transition:0.2s !important; box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important; font-family: sans-serif !important; pointer-events: auto !important; opacity: 1 !important;`;
-        a.textContent = `🔍 ${engine.name}`;
-        a.onmouseover = () => a.style.filter = 'brightness(0.85)';
-        a.onmouseout = () => a.style.filter = 'none';
-        a.onclick = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            window.open(finalUrl, '_blank');
-        };
-        return a;
+        let ancestor = target && target.parentElement;
+        let fallback = null;
+        while (ancestor && ancestor !== document.body) {
+            if (!isSidebarLike(ancestor) && /^(?:article|section|div)$/i.test(ancestor.tagName || '')) {
+                const marker = `${ancestor.id || ''} ${typeof ancestor.className === 'string' ? ancestor.className : ''}`;
+                if (ROOT_MARKER_RE.test(marker)) return ancestor;
+                // A number of legacy pages have no semantic main wrapper. Use
+                // the nearest normal-flow container with sibling blocks as a
+                // local safety boundary instead of dropping the toolbar.
+                const style = window.getComputedStyle ? window.getComputedStyle(ancestor) : null;
+                if (!fallback && ancestor.children.length > 1 && (!style || !['fixed', 'sticky'].includes(style.position))) {
+                    fallback = ancestor;
+                }
+            }
+            ancestor = ancestor.parentElement;
+        }
+        return fallback;
+    }
+ 
+    function findContentMount() {
+        const heading = Array.from(document.querySelectorAll('h1, h2, h3')).find(element => {
+            return isVisible(element) && isSafeToolbarTarget(element);
+        });
+        if (heading && heading.parentElement && !isSidebarLike(heading.parentElement)) return heading.parentElement;
+        const searchControl = document.querySelector('form[role="search"], [role="search"], input[type="search"], input[name="q"], input[name="keyword"], input[placeholder*="搜索"], input[placeholder*="search" i]');
+        if (searchControl) {
+            const form = searchControl.closest('form');
+            const parent = form || searchControl.parentElement;
+            if (parent && isSafeToolbarTarget(parent) && !isSidebarLike(parent)) return parent;
+        }
+        const root = document.querySelector(MAIN_ROOT_SELECTORS.join(', '));
+        if (root && isSafeToolbarTarget(root)) return root;
+        return Array.from(document.body?.children || []).find(element => {
+            if (!isVisible(element) || isSidebarLike(element) || /^(?:header|nav|footer|aside)$/i.test(element.tagName)) return false;
+            const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+            return (!style || !['fixed', 'sticky'].includes(style.position)) && isSafeToolbarTarget(element);
+        }) || null;
+    }
+ 
+    function directChildUnder(root, node) {
+        if (!root || !node || !root.contains(node)) return null;
+        let current = node;
+        while (current.parentElement && current.parentElement !== root) current = current.parentElement;
+        return current.parentElement === root ? current : null;
+    }
+ 
+    function resolveInsertionAnchor(anchor, root, options = {}) {
+        let insertionAnchor = anchor;
+        let promoted = false;
+        let sawLayout = false;
+        let parent = anchor.parentElement;
+        while (parent && parent !== document.body) {
+            const style = window.getComputedStyle ? window.getComputedStyle(parent) : null;
+            const isLayoutContainer = !!(style && /^(?:flex|inline-flex|grid|inline-grid)$/.test(style.display));
+            if (isLayoutContainer) {
+                insertionAnchor = parent;
+                promoted = true;
+                sawLayout = true;
+            } else if (sawLayout) {
+                // Stop at the first normal-flow wrapper after a consecutive
+                // flex/grid chain; crossing it would move the slot into a
+                // page-level shell or an unrelated column.
+                break;
+            }
+            if (parent === root) break;
+            parent = parent.parentElement;
+        }
+        const rect = insertionAnchor && insertionAnchor.getBoundingClientRect ? insertionAnchor.getBoundingClientRect() : null;
+        const placeBefore = !!options.before
+            || insertionAnchor === root
+            || (!root && insertionAnchor.parentElement === document.body)
+            || (promoted && rect && rect.height > 300);
+        return { insertionAnchor, placeBefore };
+    }
+ 
+    function createSafeSlot(target, options = {}) {
+        const root = options.root || findMainRoot(target);
+        const anchor = options.mountAfter || target;
+        if (!anchor || !anchor.parentNode) return null;
+        // Keep the toolbar next to the title by default. Promoting every
+        // anchor to a root's direct child can place it after a very large
+        // hero/detail block on SPA pages. relocateSlotToMainEnd() remains the
+        // guarded fallback when the local placement would overlap chrome.
+        const placement = resolveInsertionAnchor(anchor, root, options);
+        const insertionAnchor = placement.insertionAnchor;
+        if (!insertionAnchor || isSidebarLike(insertionAnchor)) return null;
+ 
+        const slot = document.createElement('div');
+        slot.className = 'cg-search-slot';
+        slot.setAttribute('data-cg-slot', 'true');
+        slot.setAttribute('aria-label', '跨站搜索入口');
+        // Preserve the host layout's horizontal gutters. Koko/ErogameScape
+        // uses #main > * { margin-left:185px; margin-right:160px }; resetting
+        // those margins moves the slot over the left menu.
+        const anchorStyle = window.getComputedStyle ? window.getComputedStyle(insertionAnchor) : null;
+        if (anchorStyle) {
+            slot.style.setProperty('--cg-slot-margin-left', anchorStyle.marginLeft || '0px');
+            slot.style.setProperty('--cg-slot-margin-right', anchorStyle.marginRight || '0px');
+        }
+        insertionAnchor.parentNode.insertBefore(slot, placement.placeBefore ? insertionAnchor : insertionAnchor.nextSibling);
+        return slot;
+    }
+ 
+    function rectanglesOverlap(first, second) {
+        return first.left < second.right && first.right > second.left && first.top < second.bottom && first.bottom > second.top;
+    }
+ 
+    function slotLayoutIsSafe(slot, target) {
+        const rootCandidate = findMainRoot(target);
+        const knownRoot = !!(rootCandidate && rootCandidate.contains(slot));
+        const root = rootCandidate || (slot.parentElement && slot.parentElement !== document.body ? slot.parentElement : document.body);
+        if (!root || !slot.isConnected) return false;
+        const slotRect = slot.getBoundingClientRect();
+        if (slotRect.width === 0 || slotRect.height === 0) return true;
+        const rootRect = root.getBoundingClientRect();
+        // A fallback parent can have intentionally inherited gutters. Only
+        // enforce the strict horizontal boundary when a semantic main root is
+        // known; forbidden-region overlap is still checked in both cases.
+        if (knownRoot && (slotRect.left < rootRect.left - 2 || slotRect.right > rootRect.right + 2)) return false;
+        const forbidden = document.querySelectorAll('#left_menu, #right_menu, header, nav, aside, footer, [role="banner"], [role="navigation"], .navbar, .site-header, .global-header');
+        for (const element of forbidden) {
+            if (element === slot || slot.contains(element) || element.contains(slot)) continue;
+            if (!isVisible(element)) continue;
+            if (rectanglesOverlap(slotRect, element.getBoundingClientRect())) return false;
+        }
+        return true;
+    }
+ 
+    function relocateSlotToMainEnd(slot, target) {
+        const root = findMainRoot(target) || (slot.parentElement && slot.parentElement !== document.body ? slot.parentElement : document.body);
+        if (!root || isSidebarLike(root)) return false;
+        const direct = directChildUnder(root, target);
+        const sourceStyle = direct && window.getComputedStyle ? window.getComputedStyle(direct) : null;
+        if (sourceStyle) {
+            slot.style.setProperty('--cg-slot-margin-left', sourceStyle.marginLeft || '0px');
+            slot.style.setProperty('--cg-slot-margin-right', sourceStyle.marginRight || '0px');
+        }
+        slot.style.setProperty('clear', 'both', 'important');
+        if (root === target) {
+            const parent = root.parentNode;
+            if (!parent) return false;
+            parent.insertBefore(slot, root.nextSibling);
+        } else {
+            root.appendChild(slot);
+        }
+        return slotLayoutIsSafe(slot, target);
+    }
+ 
+    function cleanupLegacyToolbars() {
+        const currentSelector = `.cg-search-toolbar[data-cg-toolbar-version="${TOOLBAR_VERSION}"]`;
+        const hasCurrentToolbar = !!document.querySelector(currentSelector);
+        document.querySelectorAll('.cg-search-toolbar').forEach(toolbar => {
+            if (toolbar.getAttribute('data-cg-toolbar-version') === TOOLBAR_VERSION) return;
+            const parent = toolbar.parentElement;
+            if (parent) {
+                parent.querySelectorAll('[data-cg-added], [data-cg-deep-added]').forEach(node => {
+                    node.removeAttribute('data-cg-added');
+                    node.removeAttribute('data-cg-deep-added');
+                });
+            }
+            toolbar.remove();
+        });
+        // Older copies may leave buttons outside the toolbar wrapper.
+        document.querySelectorAll('[data-cg-btn]').forEach(button => {
+            if (!button.closest(`.cg-search-toolbar[data-cg-toolbar-version="${TOOLBAR_VERSION}"]`)) button.remove();
+        });
+        document.querySelectorAll('.cg-search-slot').forEach(slot => {
+            if (!slot.querySelector(currentSelector)) slot.remove();
+        });
+        if (!hasCurrentToolbar) {
+            document.querySelectorAll('[data-cg-added], [data-cg-deep-added]').forEach(node => {
+                node.removeAttribute('data-cg-added');
+                node.removeAttribute('data-cg-deep-added');
+            });
+        }
+    }
+ 
+    function createToolbar(keyword, inline = false) {
+        ensureUiStyles();
+        const toolbar = document.createElement('div');
+        toolbar.className = `cg-search-toolbar${inline ? ' cg-search-toolbar--inline' : ''}`;
+        toolbar.setAttribute('role', 'group');
+        toolbar.setAttribute('aria-label', '跨站搜索');
+        toolbar.setAttribute('data-cg-toolbar', 'true');
+        toolbar.setAttribute('data-cg-toolbar-version', TOOLBAR_VERSION);
+        toolbar.setAttribute('data-cg-keyword', normalizeForMatch(keyword));
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'cg-search-toolbar__toggle';
+        toggle.setAttribute('aria-expanded', 'false');
+        toggle.setAttribute('aria-controls', `cg-search-panel-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+        toggle.setAttribute('aria-label', '展开跨站搜索');
+        toggle.title = '展开跨站搜索';
+        toggle.textContent = '🔍 搜索';
+ 
+        const panel = document.createElement('div');
+        panel.className = 'cg-search-toolbar__panel';
+        panel.id = toggle.getAttribute('aria-controls');
+        panel.hidden = true;
+        panel.setAttribute('role', 'group');
+        panel.setAttribute('aria-label', '搜索站点');
+        for (const type of ENGINE_ORDER) {
+            if (shouldSkipEngine(type)) continue;
+            const button = createBtn(keyword, type);
+            if (button) panel.appendChild(button);
+        }
+        toggle.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            panel.hidden = !panel.hidden;
+            const expanded = !panel.hidden;
+            toggle.setAttribute('aria-expanded', String(expanded));
+            toggle.setAttribute('aria-label', expanded ? '收起跨站搜索' : '展开跨站搜索');
+            toggle.title = expanded ? '收起跨站搜索' : '展开跨站搜索';
+            toggle.textContent = expanded ? '× 收起' : '🔍 搜索';
+        });
+        toolbar.appendChild(toggle);
+        toolbar.appendChild(panel);
+        return toolbar;
+    }
+ 
+    function attachToolbar(target, keyword, options = {}) {
+        if (!isSafeToolbarTarget(target) || target.hasAttribute(options.marker || 'data-cg-added')) return false;
+        // A page gets one shared entry bar. Dynamic result pages can replace
+        // their title nodes repeatedly; without this guard each mutation
+        // would create another bar before the previous node is observed.
+        if (document.querySelector(`.cg-search-toolbar[data-cg-toolbar-version="${TOOLBAR_VERSION}"]`)) return false;
+        const toolbar = createToolbar(keyword, !!options.inline);
+        const panel = toolbar.querySelector('.cg-search-toolbar__panel');
+        if (!panel || !panel.children.length) return false;
+        if (options.highlight) {
+            target.style.backgroundColor = 'rgba(255, 235, 59, .4)';
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        // Mount in a dedicated block after the title. The safety pass below
+        // relocates it only when the host layout would overlap navigation or
+        // a sidebar, so normal-flow pages retain their original structure.
+        let slot = null;
+        if (options.inline && (target.tagName === 'TR' || target.tagName === 'TD' || target.tagName === 'TH')) {
+            const cell = target.tagName === 'TR' ? target.querySelector('td, th') : target;
+            if (cell && !isSidebarLike(cell)) {
+                slot = document.createElement('div');
+                slot.className = 'cg-search-slot';
+                slot.setAttribute('data-cg-slot', 'true');
+                cell.appendChild(slot);
+            }
+        }
+        if (!slot) slot = createSafeSlot(target, options);
+        if (!slot) return false;
+        if (!slotLayoutIsSafe(slot, target) && !relocateSlotToMainEnd(slot, target)) {
+            slot.remove();
+            return false;
+        }
+        slot.appendChild(toolbar);
+        if (!slotLayoutIsSafe(slot, target) && !relocateSlotToMainEnd(slot, target)) {
+            slot.remove();
+            return false;
+        }
+        target.setAttribute(options.marker || 'data-cg-added', 'true');
+        return true;
+    }
+ 
+    function getTitleItem(target, sources, fallback = '') {
+        if (!isSafeToolbarTarget(target)) return null;
+        const keyword = chooseTitle([...(sources || []), fallback]);
+        return keyword ? { target, keyword } : null;
+    }
+ 
+    // DMM/FANZA has many non-product surfaces whose generic h1 is a section
+    // label (library, account, navigation, etc.). Never mount the toolbar on
+    // those pages; only product title nodes or an explicit search result may
+    // provide a keyword.
+    const DMM_UTILITY_PATH_RE = /(?:^|\/)(?:mylibrary|my-library|mypage|favorite|favorites|wishlist|cart|login|logout|register|signup|auth|help)(?:\/|$)/i;
+    const DMM_PRODUCT_TITLE_SELECTOR = '#work_name, .productTitle__item--headline, .productTitle__txt, h1[data-e2e-title-in-product-detail], [data-testid*="product-title"], [data-testid*="work-name"], .product-title, .work_name';
+    const DMM_PRODUCT_PATH_RE = /\/(?:dc\/[^/]+\/[-_]\/detail|detail|product|digital|mono)(?:\/|$)/i;
+ 
+    function isDmmUtilityPage() {
+        const path = location.pathname || '/';
+        if (DMM_UTILITY_PATH_RE.test(path)) return true;
+        return /\/dc\/[-_]\/mylibrary(?:\/|$)/i.test(path);
+    }
+ 
+    function getDmmProductTitle() {
+        let target = document.querySelector(DMM_PRODUCT_TITLE_SELECTOR);
+        if (!target && DMM_PRODUCT_PATH_RE.test(location.pathname || '')) {
+            target = document.querySelector('#title, main h1, article h1');
+        }
+        if (!target || !isVisible(target)) return null;
+        if (target.closest('header, nav, footer, .breadcrumb, .navigation, .menu')) return null;
+        return target;
+    }
+ 
+    function isSafeToolbarTarget(target) {
+        if (!target || target.nodeType !== 1) return false;
+        if (target === document.body || target === document.documentElement) return false;
+        const chrome = target.closest('header, nav, footer, [role="banner"], [role="navigation"], .navbar, .site-header, .global-header, .breadcrumb');
+        // 2DFan reuses Bootstrap's `.navbar` class for the in-content title
+        // strip (`.navbar.block-header`). It is normal flow content, not site
+        // navigation, so keep it eligible while retaining the chrome guard.
+        const isLegacyContentHeader = !!(chrome && chrome.classList && chrome.classList.contains('block-header') && !/^(?:HEADER|NAV|FOOTER)$/i.test(chrome.tagName || ''));
+        if (chrome && !isLegacyContentHeader) return false;
+        const style = window.getComputedStyle ? window.getComputedStyle(target) : null;
+        if (style && (style.position === 'fixed' || style.position === 'sticky')) return false;
+        return true;
+    }
+ 
+    function handleGoogleSearch() {
+        if (!/^(?:www\.)?google\.[^/]+$/i.test(location.hostname)) return false;
+        const rawQuery = new URLSearchParams(location.search).get('q') || '';
+        const site = /site:(seiya-saiga\.com|sagaoz\.net)/i.exec(rawQuery);
+        if (!site) return false;
+        const query = rawQuery.replace(/site:(?:seiya-saiga\.com|sagaoz\.net)/ig, ' ').replace(/\s+/g, ' ').trim();
+        if (normalizeForMatch(query).length < MIN_FINGER_LENGTH) return false;
+        const allowedHost = site[1].toLowerCase();
+        const anchors = Array.from(document.querySelectorAll('a[href]')).filter(anchor => {
+            try { return new URL(anchor.href).hostname.endsWith(allowedHost); } catch { return false; }
+        });
+        const match = findBestMatch(anchors, query, .56);
+        if (!match) return false;
+        try {
+            const targetUrl = new URL(match.element.href);
+            targetUrl.searchParams.set('cgsearch', query);
+            if (targetUrl.href !== location.href) location.replace(targetUrl.href);
+            return true;
+        } catch {
+            return false;
+        }
     }
  
     function handleSeiyaLogic() {
-        if (!location.hostname.includes('seiya-saiga.com') && !location.hostname.includes('sagaoz.net')) return;
-        const params = new URLSearchParams(location.search);
-        const searchRaw = params.get('cgsearch');
-        if (!searchRaw) return;
-        const searchFinger = normalizeForMatch(searchRaw);
+        if (!/seiya-saiga\.com$|sagaoz\.net$/i.test(location.hostname)) return false;
+        const searchRaw = new URLSearchParams(location.search).get('cgsearch');
+        if (!searchRaw || normalizeForMatch(searchRaw).length < MIN_FINGER_LENGTH) return false;
  
-        if (location.pathname.includes('save.html')) {
-            const rows = Array.from(document.querySelectorAll('tr'));
-            let bestRow = null, bestScore = -1;
-            rows.forEach(row => {
-                const titleCell = row.querySelector('td[align="left"]');
-                if (!titleCell) return;
-                const text = titleCell.textContent.trim();
-                const rowFinger = normalizeForMatch(text);
-                if (!rowFinger || rowFinger.length < 2) return;
-                let score = (rowFinger === searchFinger) ? 10000 : (searchFinger.includes(rowFinger) ? rowFinger.length : (rowFinger.includes(searchFinger) ? searchFinger.length : -1));
-                if (score > bestScore) { bestScore = score; bestRow = row; }
-            });
-            if (bestRow && !bestRow.hasAttribute('data-cg-deep-added')) {
-                bestRow.style.backgroundColor = "rgba(255, 235, 59, 0.4)";
-                bestRow.scrollIntoView({ behavior: "smooth", block: "center" });
-                const cell = bestRow.querySelector('td[align="left"]');
-                const span = document.createElement('span');
-                span.style.marginLeft = "10px";
-                span.appendChild(createBtn(searchRaw, 'hitomi'));
-                span.appendChild(createBtn(searchRaw, 'moonchan'));
-                span.appendChild(createBtn(searchRaw, 'eh'));
-                cell.appendChild(span);
-                bestRow.setAttribute('data-cg-deep-added', 'true');
-            }
-            return;
+        if (/save\.html/i.test(location.pathname)) {
+            const match = findBestMatch(Array.from(document.querySelectorAll('tr, .save-list li, .game-list li')), searchRaw, .58);
+            if (match) attachToolbar(match.element.querySelector('td[align="left"], .title, .name') || match.element, searchRaw, { inline: true, marker: 'data-cg-deep-added', highlight: true });
+            return false;
         }
  
-        if (location.pathname.includes('kouryaku.html') || location.pathname.includes('galge.html') || location.pathname.endsWith('game.html')) {
-            const links = document.querySelectorAll('a[href*=".html"]');
-            let bestLink = null, bestScore = -1;
-            links.forEach(link => {
-                const text = link.textContent.trim();
-                const linkFinger = normalizeForMatch(text);
-                if (!linkFinger || linkFinger.length < 2) return;
-                let score = (linkFinger === searchFinger) ? 10000 : (searchFinger.includes(linkFinger) ? linkFinger.length : (linkFinger.includes(searchFinger) ? searchFinger.length : -1));
-                if (score > bestScore) { bestScore = score; bestLink = link; }
-            });
-            if (bestLink) {
-                const t = new URL(bestLink.href); t.searchParams.set('cgsearch', searchRaw); location.href = t.href;
-            } else if (!location.hostname.includes('sagaoz.net')) { 
-                location.href = 'https://www.google.com/search?q=site:seiya-saiga.com+' + encodeURIComponent(searchRaw); 
+        if (/(?:kouryaku\.html|galge\.html|\/game\.html$)/i.test(location.pathname)) {
+            const links = Array.from(document.querySelectorAll('a[href]')).filter(link => /\.html(?:[?#]|$)/i.test(link.getAttribute('href') || ''));
+            const match = findBestMatch(links, searchRaw, .58);
+            if (match) {
+                try {
+                    const targetUrl = new URL(match.element.href);
+                    targetUrl.searchParams.set('cgsearch', searchRaw);
+                    if (targetUrl.href !== location.href) location.replace(targetUrl.href);
+                    return true;
+                } catch { /* ignore malformed legacy links */ }
             }
-        } else {
-            const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
-            let node;
-            while ((node = walker.nextNode())) {
-                const text = node.nodeValue.trim();
-                const nodeFinger = normalizeForMatch(text);
-                if (nodeFinger && (nodeFinger.includes(searchFinger) || searchFinger.includes(nodeFinger)) && !['SCRIPT','STYLE'].includes(node.parentNode.tagName)) {
-                    const p = node.parentNode;
-                    if (p.hasAttribute('data-cg-deep-added')) continue;
-                    p.style.backgroundColor = "rgba(255, 235, 59, 0.4)";
-                    p.scrollIntoView({ behavior: "smooth", block: "center" });
-                    const span = document.createElement('span');
-                    span.appendChild(createBtn(searchRaw, 'hitomi'));
-                    span.appendChild(createBtn(searchRaw, 'moonchan'));
-                    span.appendChild(createBtn(searchRaw, 'eh'));
-                    p.appendChild(span);
-                    p.setAttribute('data-cg-deep-added', 'true');
-                }
-            }
+            if (/sagaoz\.net$/i.test(location.hostname)) return false;
+            location.replace(`https://www.google.com/search?q=${encodeURIComponent(`site:seiya-saiga.com ${searchRaw}`)}`);
+            return true;
         }
+ 
+        const candidates = Array.from(document.querySelectorAll('h1, h2, h3, .title, .name, td[align="left"]'));
+        const match = findBestMatch(candidates, searchRaw, .62);
+        if (match) attachToolbar(match.element, searchRaw, { inline: true, marker: 'data-cg-deep-added', highlight: true });
+        return false;
     }
  
     const SITES = [
-        { name: "VNDB", check: () => location.hostname.includes('vndb.org') && location.pathname.startsWith('/v'), run: () => {
-            const h1 = Array.from(document.querySelectorAll('h1')).find(h => !h.closest('header') && h.offsetParent !== null);
-            if (!h1) return null;
-            let kw = h1.textContent.trim();
-            const jp = document.querySelector('h2.alttitle[lang="ja"]');
-            if (jp && jp.textContent.trim()) kw = jp.textContent.trim();
-            return { target: h1, keyword: kw };
-        }},
-        { name: "MoYu", check: () => location.hostname.includes('moyu.moe'), run: () => {
-            const params = new URLSearchParams(location.search);
-            const h1 = document.querySelector('h1');
-            if (!h1) return null;
-            if (params.get('q')) return { target: h1, keyword: params.get('q') };
-            const ogTitle = document.querySelector('meta[property="og:title"]');
-            let kw = (ogTitle && ogTitle.content.includes('|')) ? ogTitle.content.split('|')[1].replace(/的(下载资源|评论|信息|资源).*/, '').trim() : h1.textContent.trim();
-            const jpSpan = h1.closest('div')?.nextElementSibling?.querySelector('span.text-xs');
-            if (jpSpan && hasJapanese(jpSpan.textContent)) kw = jpSpan.textContent.trim();
-            const card = Array.from(document.querySelectorAll('div')).find(el => el.textContent.trim() === '缺少介绍？')?.closest('.dark\\:bg-neutral-800'); 
-            return { target: card || h1, keyword: kw };
-        }},
-        { name: "Ai2", check: () => location.hostname.includes('ai2.moe'), run: () => {
-            const params = new URLSearchParams(location.search);
-            const h1 = document.querySelector('h1.ipsType_pageTitle');
-            if (!h1) return null;
-            if (params.get('q')) return { target: h1, keyword: params.get('q') };
-            let kw = h1.querySelector('.ipsType_break')?.textContent.trim() || h1.innerText.trim();
-            kw = kw.replace(/\[(?:tg|直链|下载|tg直链下载|站内存储).*?\]/gi, '').replace(/\s+\d+\.\d+(\.\d+)?$/, '').trim();
-            return { target: h1.closest('.ipsPageHeader') || h1, keyword: kw };
-        }},
-        { name: "2DFan", check: () => /2dfan|2dfdf|2dfmax|fan2d|galge/.test(location.hostname), run: () => {
-            const h3 = Array.from(document.querySelectorAll('h3')).find(h => !h.classList.contains('site-name') && h.offsetParent !== null);
-            if (!h3) {
-                const searchInput = document.querySelector('input[name="keyword"]');
-                if (searchInput) return { target: searchInput.parentElement, keyword: searchInput.value };
+        {
+            name: 'VNDB',
+            check: () => /(?:^|\.)vndb\.org$/i.test(location.hostname) && /^\/v\d+/i.test(location.pathname),
+            run: () => {
+                const target = document.querySelector('h1.vn-title, h1#page-title, main h1[lang], article h1[lang]') || findContentHeading('main h1, article h1');
+                const jp = document.querySelector('h2.alttitle[lang="ja"], [lang="ja"].alttitle, [data-lang="ja"], main h1[lang^="ja"]');
+                return getTitleItem(target, [jp, target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'MoYu',
+            check: () => /(?:^|\.)moyu\.moe$/i.test(location.hostname) && /^(?:\/(?:patch|resource|galgame|game|search))(?:\/|$)/i.test(location.pathname),
+            run: () => {
+                const target = findContentHeading('h1, .work-title, article h2');
+                const query = getQueryKeyword(['q', 'keyword', 's']);
+                if (query) return getTitleItem(target || findContentMount(), [query]);
+                // `[lang="ja"]` also matches the document root on Moyu and
+                // therefore contributes the entire page text. Only inspect a
+                // title-bearing node; the explicit heading is the authority.
+                return getTitleItem(target, [target, document.querySelector('h1[lang="ja"], [data-original-title]'), ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'Ai2',
+            check: () => /(?:^|\.)ai2\.moe$/i.test(location.hostname),
+            run: () => {
+                const target = findContentHeading('h1.ipsType_pageTitle, .ipsPageHeader h1, h1');
+                const query = getQueryKeyword(['q', 'keyword']);
+                return getTitleItem(target || findContentMount(), [query, target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: '2DFan',
+            check: () => /(?:2dfan|2dfdf|2dfmax|fan2d|galge)\.(?:com|de|top)$/i.test(location.hostname),
+            run: () => {
+                const path = location.pathname || '/';
+                const input = document.querySelector('input[name="keyword"], input[name="q"], input[type="search"]');
+                const query = getQueryKeyword(['keyword', 'q']);
+ 
+                // Modern 2DFan has a site-name h3 followed by the actual
+                // result/detail heading. Keep the search query as the source
+                // on result pages so `_2DFan` and page chrome never leak in.
+                if (/\/subjects\/search(?:\/|$)/i.test(path)) {
+                    if (!query) return null;
+                    const resultTitle = findContentHeading('#content h4.media-heading, #content h4, h4.media-heading, .subject-title, .game-title');
+                    const searchMount = input && (input.closest('form') || input.parentElement);
+                    return getTitleItem(resultTitle || searchMount || document.querySelector('#content') || findContentMount(), [query]);
+                }
+ 
+                if (/\/subjects\/\d+(?:\/|$)/i.test(path)) {
+                    const title = findContentHeading('#content h3, h3.subject-title, .subject-title, .game-title, h1, h2');
+                    return getTitleItem(title, [title]);
+                }
+ 
+                // Preserve support for the older alias domains while avoiding
+                // the `site-name` heading and metadata-only fallbacks.
+                const target = findContentHeading('#content h3, h1, h2, h3.subject-title, .subject-title, .game-title, .title');
+                if (!target) return query ? getTitleItem(input && (input.closest('form') || input.parentElement), [query]) : null;
+                return getTitleItem(target, [query, target]);
+            }
+        },
+        {
+            name: 'Bangumi',
+            check: () => /^(?:www\.)?(?:bgm|bangumi)\.tv$|^(?:www\.)?chii\.in$/i.test(location.hostname),
+            run: () => {
+                if (/^\/subject\/\d+/i.test(location.pathname)) {
+                    const target = findContentHeading('h1.nameSingle, #headerSubject h1, h1');
+                    return getTitleItem(target, [target, document.querySelector('#subject_inner_info [lang="ja"]'), ...getMetaTitle()]);
+                }
+                if (/^\/subject_search(?:\/|$)/i.test(location.pathname)) {
+                    const input = document.querySelector('#search_text, input[name="search_text"], input[name="keyword"], input[type="search"]');
+                    const query = getQueryKeyword(['q', 'keyword']) || getPathKeyword('/subject_search/');
+                    return query ? getTitleItem(input && (input.closest('form') || input.parentElement) || findContentMount(), [query]) : null;
+                }
                 return null;
             }
-            let kw = new URLSearchParams(location.search).get('keyword') || h3.textContent.trim();
-            for (let el of document.querySelectorAll('p, td, span')) {
-                if (el.textContent.includes('原名')) { kw = el.textContent.replace(/.*原名[:：]/, '').trim(); break; }
+        },
+        {
+            name: 'DLsite',
+            check: () => /(?:^|\.)dlsite\.com$/i.test(location.hostname),
+            run: () => {
+                const productTarget = document.querySelector('#work_name, .productTitle__txt, .work_name');
+                const query = getQueryKeyword(['keyword', 'q', 'word']) || getPathKeyword('/pro/fsr/=/keyword/');
+                if (productTarget) return getTitleItem(productTarget, [query, productTarget, ...getMetaTitle()]);
+                if (!query || !/\/pro\/fsr\/=\/keyword\//i.test(location.pathname)) return null;
+                const searchTarget = document.querySelector('#base_title_br, .base_title_br, #search_result_list, #main_inner, #main');
+                return getTitleItem(searchTarget || findContentMount(), [query]);
             }
-            return { target: h3, keyword: kw };
-        }},
-        { name: "Bangumi", check: () => /bgm\.tv|bangumi\.tv/.test(location.hostname), run: () => {
-            const h1 = document.querySelector('h1.nameSingle');
-            return h1 ? { target: h1, keyword: (h1.querySelector('a')?.textContent || h1.textContent).trim() } : null;
-        }},
-        { name: "DLsite", check: () => location.hostname.includes('dlsite.com'), run: () => {
-            const h1 = document.getElementById('work_name');
-            if (h1) return { target: h1, keyword: h1.textContent.trim() };
-            const kw = new URLSearchParams(location.search).get('keyword') || document.querySelector('input[name="keyword"]')?.value;
-            return kw ? { target: document.querySelector('.search_result_title') || document.body, keyword: kw } : null;
-        }},
-        { name: "DMM", check: () => /dmm\.(co\.jp|com)/.test(location.hostname), run: () => {
-            const h1 = document.getElementById('work_name') || 
-                       document.querySelector('.productTitle__item--headline') || 
-                       document.querySelector('h1[data-e2e-title-in-product-detail]') ||
-                       document.getElementById('title') || 
-                       document.querySelector('h1');
-            if (!h1 || h1.closest('.breadcrumb') || h1.offsetWidth === 0) return null;
-            return { target: h1, keyword: h1.textContent.trim() };
-        }},
-        { name: "ErogameScape", check: () => /erogamescape\.org|koko\.kyara\.top/.test(location.hostname), run: () => {
-            const div = document.getElementById('game_title') || document.getElementById('soft-title');
-            if (!div) return null;
-            let txt = (div.querySelector('a') && div.id === 'game_title') ? div.querySelector('a').textContent.trim() : div.innerText.split('\n')[0].split('（')[0].split('(')[0].trim();
-            return { target: div, keyword: txt };
-        }},
-        { name: "Moepedia", check: () => location.hostname.includes('moepedia.net') && !location.href.includes('/search/result/'), run: () => {
-            const h1 = document.querySelector('h1');
-            if (!h1) return null;
-            return { target: h1, keyword: h1.textContent.trim() };
-        }},
-        { name: "Sagaoz", check: () => location.hostname.includes('sagaoz.net') && !location.pathname.endsWith('game.html'), run: () => {
-            const target = document.querySelector('h1') || document.querySelector('caption') || document.querySelector('td[bgcolor="#ccffcc"] b') || document.querySelector('div[align="center"] b font[size="5"]');
-            if (!target) return null;
-            let kw = target.textContent.trim().replace(/攻略|全CG|Save|セーブ/gi, '').split('\n')[0].split('（')[0].split('(')[0].trim();
-            if (kw.length < 2) return null;
-            return { target: target.closest('table') || target, keyword: kw };
-        }},
-        { name: "VGMdb", check: () => location.hostname.includes('vgmdb.net') && (location.pathname.includes('album') || location.pathname.includes('product') || location.pathname.includes('artist')), run: () => {
-            const h1 = document.querySelector('h1');
-            if (!h1) return null;
-            let kw = h1.textContent.trim();
-            const jpSpan = h1.querySelector('span[lang="ja"]');
-            if (jpSpan) kw = jpSpan.textContent.trim();
-            return { target: h1, keyword: kw };
-        }}
+        },
+        {
+            name: 'DMM',
+            check: () => /dmm\.(?:co\.jp|com)$/i.test(location.hostname),
+            run: () => {
+                if (isDmmUtilityPage()) return null;
+                const target = getDmmProductTitle();
+                const query = getQueryKeyword(['searchstr', 'keyword', 'q']) || getPathKeyword('/search/=/searchstr=');
+                if (!target && !query) return null;
+                if (target) return getTitleItem(target, [query, target, ...getMetaTitle()]);
+                const searchTarget = document.querySelector('.search_result_title, .search-result, [data-search-result], form[role="search"]');
+                return searchTarget ? getTitleItem(searchTarget, [query]) : null;
+            }
+        },
+        {
+            name: 'ErogameScape',
+            check: () => /(?:^|\.)(?:erogamescape\.org|erogamescape\.dyndns\.org)$|(?:^|\.)koko\.kyara\.top$/i.test(location.hostname),
+            run: () => {
+                if (/kensaku\.php/i.test(location.pathname)) {
+                    const query = getQueryKeyword(['word', 'q', 'keyword']);
+                    if (!query) return null;
+                    const resultTitle = document.querySelector('#main h2, main h2, .search-result-title, .results-title');
+                    return getTitleItem(resultTitle || findContentMount(), [query]);
+                }
+                const title = document.querySelector('#game_title, .game-title, .work-title');
+                const mount = document.querySelector('#soft-title') || title;
+                if (!mount) return null;
+                return getTitleItem(mount, [title && (title.querySelector('a') || title), mount, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'Moepedia',
+            check: () => /(?:^|\.)moepedia\.net$/i.test(location.hostname) && /^\/game\/[^/]+/i.test(location.pathname),
+            run: () => {
+                const target = findContentHeading('h1, h2, .entry-title, .post-title, .game-title');
+                return getTitleItem(target, [target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'Sagaoz',
+            check: () => /(?:^|\.)sagaoz\.net$/i.test(location.hostname) && !/\/game\.html$/i.test(location.pathname),
+            run: () => {
+                const target = findContentHeading('h1, caption, td[bgcolor="#ccffcc"] b, div[align="center"] b font[size="5"]');
+                return getTitleItem(target, [target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'VGMdb',
+            check: () => /(?:^|\.)vgmdb\.net$/i.test(location.hostname) && /\/(?:album|product|artist)\//i.test(location.pathname),
+            run: () => {
+                const target = findContentHeading('h1, .albumtitle, .product-title');
+                return getTitleItem(target, [target && target.querySelector('[lang="ja"]'), target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'Hitomi',
+            check: () => /(?:^|\.)hitomi\.la$/i.test(location.hostname),
+            run: () => {
+                const target = findContentHeading('#gallery-title, .gallery-title, h1, h2');
+                let query = getQueryKeyword(['q', 'keyword']);
+                if (!query && /\/search\.html$/i.test(location.pathname) && location.search.length > 1) {
+                    try {
+                        const raw = decodeURIComponent(location.search.slice(1).replace(/\+/g, ' '));
+                        if (isLikelyGameTitle(raw)) query = cleanGameTitle(raw);
+                    } catch { /* ignore malformed search text */ }
+                }
+                return getTitleItem(target || findContentMount(), [query, target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'EH',
+            check: () => /(?:^|\.)(?:e-hentai|exhentai)\.org$/i.test(location.hostname),
+            run: () => {
+                const target = findContentHeading('#gn, #gallery-front h1, .gm h1, h1');
+                const query = getQueryKeyword(['f_search', 'q']);
+                return getTitleItem(target || findContentMount(), [query, target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'Moonchan',
+            check: () => /(?:^|\.)ex\.moonchan\.xyz$/i.test(location.hostname),
+            run: () => {
+                const target = findContentHeading('h1, h2, .title, .name');
+                const query = getQueryKeyword(['f_search', 'q', 'keyword']);
+                return getTitleItem(target || findContentMount(), [query, target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'GGbase',
+            check: () => /(?:^|\.)ggbases\.dlgal\.com$/i.test(location.hostname),
+            run: () => {
+                const target = findContentHeading('h1, .game-title, .subject-title, .title');
+                const query = getQueryKeyword(['title', 'q', 'keyword']);
+                return getTitleItem(target || findContentMount(), [query, target, ...getMetaTitle()]);
+            }
+        },
+        {
+            name: 'Nyaa',
+            check: () => /(?:^|\.)sukebei\.nyaa\.si$/i.test(location.hostname),
+            run: () => {
+                const target = findContentHeading('h1, .torrent-title, .view tbody tr:first-child td');
+                const query = getQueryKeyword(['q', 'keyword']);
+                if (!query) return null;
+                return getTitleItem(target || findContentMount(), [query, target]);
+            }
+        },
+        {
+            name: 'Bishogedb',
+            check: () => /^(?:www\.)?bishogedb\.com$/i.test(location.hostname),
+            run: () => {
+                if (/^\/item\/[^/]+/i.test(location.pathname)) {
+                    const title = document.querySelector('.detail-title, .hero-title-block h1');
+                    const target = title?.closest('.hero-title-block') || title;
+                    return getTitleItem(target, [title, ...getMetaTitle()]);
+                }
+                if (/^\/search(?:\/|$)/i.test(location.pathname)) {
+                    const query = getQueryKeyword(['q']);
+                    if (!query) return null;
+                    const target = document.querySelector('.search-view .view-title, .search-view h1, .view-title');
+                    return getTitleItem(target, [query]);
+                }
+                return null;
+            }
+        },
+        {
+            name: 'Seiya',
+            check: () => /(?:^|\.)seiya-saiga\.com$/i.test(location.hostname) && !/(?:kouryaku\.html|galge\.html|save\.html)/i.test(location.pathname),
+            run: () => {
+                const target = findContentHeading('h1, h2, .game-title, .title, th[height="50"] font[size="5"], th font[size="5"]');
+                const query = getQueryKeyword(['cgsearch']);
+                return getTitleItem(target || findContentMount(), [query, target, ...getMetaTitle()]);
+            }
+        }
     ];
  
     function main() {
-        const curH = location.hostname;
-        const curP = location.pathname;
-
-        if (curH.includes('google.com') && (location.search.includes('site:seiya-saiga.com') || location.search.includes('site:sagaoz.net'))) {
-            const siteTag = location.search.includes('site:seiya-saiga.com') ? 'site:seiya-saiga.com' : 'site:sagaoz.net';
-            const q = new URLSearchParams(location.search).get('q').replace(siteTag, '').trim();
-            const finger = normalizeForMatch(q);
-            document.querySelectorAll('div.g a').forEach(res => {
-                if (normalizeForMatch(res.innerText).includes(finger)) {
-                    const t = new URL(res.href); t.searchParams.set('cgsearch', q); location.href = t.href;
-                }
-            });
-            return;
-        }
-        handleSeiyaLogic();
-        const site = SITES.find(s => s.check());
+        if (!document.body) return;
+        ensureUiStyles();
+        cleanupLegacyToolbars();
+        if (handleGoogleSearch()) return;
+        if (handleSeiyaLogic()) return;
+        const site = SITES.find(candidate => candidate.check());
         if (!site) return;
-        let item = site.run();
+        let item;
+        try { item = site.run(); } catch { return; }
         if (!item || !item.target || item.target.hasAttribute('data-cg-added')) return;
-        
-        const cont = document.createElement('div');
-        cont.className = 'cg-search-toolbar';
-        cont.style.cssText = 'display:flex !important; flex-wrap:wrap !important; gap:2px !important; margin:10px 0 !important; padding:6px !important; background:rgba(0,0,0,0.03) !important; border-radius:6px !important; isolation:isolate !important; z-index:9999 !important; width: fit-content !important; min-width: 250px !important; border:none !important; pointer-events: auto !important; position: relative !important; clear: both !important;';
-        
-        if (site.name === "Bangumi") cont.style.marginLeft = "250px";
-        
-        // Added 'moonchan' between 'hitomi' and 'eh'
-        const targets = ['hitomi', 'moonchan', 'eh', 'moepedia', 'vndb', 'bgm', 'erogame', 'koko', 'seiya', 'seiyasave', 'sagaoz', 'moyu', 'ai2', '2dfan', 'dlsite', 'dmm', 'fanza', 'ggbase', 'sukebei', 'vgmdb'];
-        
-        targets.forEach(t => {
-            const engine = ENGINES[t];
-            if (t === 'dmm' && (curH === 'www.dmm.com' || curH === 'www.dmm.co.jp')) return;
-            if (t === 'fanza' && (curH === 'dlsoft.dmm.co.jp' || curH === 'dlsoft.dmm.com')) return;
-            if (t === 'seiya' && curH.includes('seiya-saiga.com') && (curP.includes('kouryaku.html') || curP.includes('galge.html'))) return;
-            if (t === 'seiyasave' && curH.includes('seiya-saiga.com') && curP.includes('save.html')) return;
-            if (t === 'sagaoz' && curH.includes('sagaoz.net')) return;
-            if (t === 'moonchan' && curH.includes('moonchan.xyz')) return;
-            if (t !== 'seiya' && t !== 'seiyasave' && t !== 'sagaoz' && t !== 'moonchan' && curH.includes(engine.name.toLowerCase())) return;
-            if (t === 'eh' && /e-hentai|exhentai/.test(curH)) return;
-            if (t === '2dfan' && /2dfan|2dfdf|2dfmax|fan2d|galge/.test(curH)) return;
-            if ((t === 'erogame' || t === 'koko') && /erogamescape|kyara\.top/.test(curH)) return;
-            if (t === 'bgm' && /bgm\.tv|bangumi\.tv/.test(curH)) return;
-            if (t === 'vgmdb' && curH.includes('vgmdb.net')) return;
- 
-            const btn = createBtn(item.keyword, t);
-            if (btn) cont.appendChild(btn);
-        });
- 
-        if (cont.children.length === 0) return;
-
-        if (site.name === "VNDB") item.target.parentNode.insertBefore(cont, item.target);
-        else item.target.parentNode.insertBefore(cont, item.target.nextSibling);
-        item.target.setAttribute('data-cg-added', 'true');
+        if (!isLikelyGameTitle(item.keyword)) return;
+        attachToolbar(item.target, item.keyword, { before: site.name === 'VNDB' });
     }
  
-    const observer = new MutationObserver(() => main());
-    observer.observe(document.body, { childList: true, subtree: true });
+    let scheduled = false;
+    function scheduleMain() {
+        if (scheduled) return;
+        scheduled = true;
+        const run = () => { scheduled = false; main(); };
+        if (typeof requestAnimationFrame === 'function') requestAnimationFrame(run);
+        else setTimeout(run, 80);
+    }
+ 
+    if (document.body && typeof MutationObserver !== 'undefined') {
+        const observer = new MutationObserver(scheduleMain);
+        observer.observe(document.body, { childList: true, subtree: true });
+    }
+    window.addEventListener('popstate', scheduleMain);
+    window.addEventListener('hashchange', scheduleMain);
     main();
 })();
