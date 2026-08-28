@@ -1,0 +1,13 @@
+{
+    "f_010": "f_PrintMessage",
+    "f_014": "f_SetName",
+    "f_081": "f_PlaySE",
+    "f_085": "f_PlayVoice",
+    "f_0a0": "f_JumpLabel",
+    "f_0a9": "f_SetNextSelectingJumping",
+    "f_0b0": "f_Select",
+    "f_0c0": "f_JumpScript",
+    "f_0c1": "f_CallScript",
+    "f_0c2": "f_TerminateExecutionOfScript",
+    "f_0fe": "f_NotifyOfLineCount"
+}
