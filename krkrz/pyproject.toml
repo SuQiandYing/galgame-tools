@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psbscn"
+version = "1.0.0"
+description = "Full disassembler and lossless repacker for PSB v3 (kirikiri/M2) .txt.scn scenario files"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.5"]
+gui-tk = ["tkinterdnd2>=0.3"]
+test = ["pytest>=7.4"]
+
+[project.scripts]
+psbscn = "psbscn.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning"]
