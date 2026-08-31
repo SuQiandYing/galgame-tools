@@ -1,352 +1,359 @@
-# SILKY'S ENGINE .MES — VM analysis and evidence ledger
+# SILKY'S ENGINE .MES —— VM 逆向分析与证据台账
 
-Single source of truth for `opcodelist.py`, `disassembler.py`, `assembler.py`
-and `run_gui.py`. Every dialect value in `opcodelist.py` traces to an `EV_*`
-entry here.
+`opcodelist.py`、`disassembler.py`、`assembler.py`、`run_gui.py` 的唯一真值源。
+`opcodelist.py` 里每一个方言取值都能追溯到本文的某个 `EV_*` 条目
+（`EV_*` 标识符保留英文，因为代码里的 `evidence_refs` 直接引用它们）。
 
-Corpus: 59 files (58 `.MES` + `LIBLARY.LIB`), 9.6 MB, from
-`E:\fuyukuru_dl\SILKYSIMAGE\新建文件夹` (ORCSOFT『冬のフクロウ』/ fuyukuru).
+语料：两部作品，共 300 个文件
 
-## Declared capability
+| 语料 | 路径 | 规模 |
+|---|---|---|
+| fuyukuru | `E:\fuyukuru_dl\SILKYSIMAGE\新建文件夹` | 59 个（58 `.MES` + `LIBLARY.LIB`），9.6 MB |
+| 作品「1」 | `E:\fuyukuru_dl\SILKYSIMAGE\1` | 241 个（240 `.MES` + `LIBLARY.LIB`），14 MB |
+
+## 能力申报
 
 ```
 analysis_mode   bytecode-disasm
 declared_tier   T3  instruction-stream
-unpack_mode     not-required        code and text are directly visible
+unpack_mode     not-required        代码与文本直接可见，无需解包
 text_source     embedded
-byte_coverage   1.0   (59/59 files)
-roundtrip       byte-identical (59/59 files)
+byte_coverage   1.0                 300/300 文件
+roundtrip       零编辑逐字节一致     300/300 文件
 repack          identity / in_place / pointer-rewrite
-not claimed     T4 semantic-cfg — no basic-block or stack-effect model
+未申报           T4 semantic-cfg —— 没有基本块与栈效应模型
 ```
 
-T3 is claimed because every byte of every file is assigned to an instruction
-with a known length and operand schema, with no `unknown_opaque_block` and no
-`tier_blocked`. T4 is **not** claimed: jump targets are resolved and relocated,
-but no control-flow graph or stack-effect analysis exists, so structural editing
-(`full-layout`) is refused rather than attempted.
+申报 T3 的依据：每个文件的每个字节都归属于一条长度已知、操作数格式已知的指令，
+无 `unknown_opaque_block`，无 `tier_blocked`。
 
-## Architecture
+**不申报 T4**：跳转目标已解析并能重定位，但没有控制流图和栈效应分析，
+因此结构性编辑（`full-layout`）是**明确拒绝**，而不是尝试后失败。
 
-Stack VM. Values are pushed by explicit `PUSH` instructions and consumed by a
-single dispatching `SYSCALL` opcode whose id is the immediately preceding
-immediate. Linear instruction stream, no separate data or string section:
-string literals are inline operands.
+## 体系结构
 
-**Endianness is mixed and this is the most common way to get the format wrong:**
+栈式 VM。值由显式 `PUSH` 压栈，由单一的 `SYSCALL` 分发指令消费，
+其功能号取自紧邻其前的那条立即数压栈。线性指令流，没有独立的数据段或字符串段——
+字符串字面量就是内联操作数。
 
-| Region | Endianness |
+**字节序是混用的，这是最容易搞错的一点：**
+
+| 区域 | 字节序 |
 |---|---|
-| header integers and offset tables | little |
-| instruction operands (`PUSH`, `JMP`, `CALL`) | big |
+| 头部整数与偏移表 | 小端 |
+| 指令操作数（`PUSH`、`JMP`、`CALL`） | **大端** |
 
-### EV_HEADER_LAYOUT — header
-- Evidence level: `derived`
-- Layout: `u32 n_labels, u32 n_entries, u32 labels[n_labels], u32 entries[n_entries]`.
-  Code begins at `8 + 4*n_labels + 4*n_entries`.
-- Cross-check: computed code start lands on a valid first instruction in all 59
-  files. In the 51 files whose `n_entries` is 0, the first code byte is `0x32`
-  (`PUSH`) in 50 cases; the exception is `_SAMPLE.MES`, a debug build.
-- `n_labels` ranges 0..1866; `n_entries` is 0 or 1 except `_SAMPLE.MES` (2).
+### EV_HEADER_LAYOUT —— 头部
 
-### EV_HEADER_LABELS / EV_HEADER_ENTRIES — offset tables
-- Evidence level: `observed`
-- Values are byte offsets **relative to code start**, not absolute.
-- This is the decisive constraint in the whole analysis: across the corpus,
-  **every one of the ~24,000 label values lands exactly on an instruction
-  boundary** under the operand-width table below. A wrong table desynchronises
-  the linear decode and misses thousands of them, so `parse()` raises
-  `LabelMisaligned` rather than continuing.
+- 证据等级：`derived`
+- 布局：`u32 n_labels, u32 n_entries, u32 labels[n_labels], u32 entries[n_entries]`，
+  代码起始于 `8 + 4*n_labels + 4*n_entries`。
+- 交叉验证：算出的代码起点在全部 300 个文件中都落在一条合法的首指令上。
+  51 个 `n_entries` 为 0 的文件里，50 个首字节是 `0x32`（`PUSH`），
+  唯一例外是 `_SAMPLE.MES`（调试构建）。
+- `n_labels` 取值 0..1866；`n_entries` 除 `_SAMPLE.MES`（2）外为 0 或 1。
 
-### EV_OPERAND_ENDIAN — operand byte order
-- Evidence level: `derived`
-- Jump operands interpreted big-endian resolve to in-range instruction
-  boundaries; little-endian interpretation yields values far beyond file size.
+### EV_HEADER_LABELS / EV_HEADER_ENTRIES —— 偏移表
 
-## Instruction encoding
+- 证据等级：`observed`
+- 表中值是**相对代码起点**的字节偏移，不是绝对偏移。
+- **这是整个分析中最关键的约束**：全语料约 24,000 个标签值
+  **每一个都精确落在指令边界上**。操作数宽度表一旦写错，线性解码就会失步并漏掉成千上万个，
+  所以 `parse()` 遇到不对齐会抛 `LabelMisaligned` 而不是继续。
 
-One-byte opcode. Three length classes:
+### EV_OPERAND_ENDIAN —— 操作数字节序
 
-### EV_PUSH_IMM / EV_JUMP_TARGETS / EV_OP19_WIDTH — 5-byte instructions
-- `0x32 PUSH imm32`, `0x14 JMP`, `0x15 CALL`, `0x19`
-- Evidence level: `observed` for `0x32`, `derived` for the rest
-- `EV_OP19_WIDTH` is worth stating explicitly because it is easy to miss and
-  its absence is silent: treating `0x19` as a 1-byte opcode still produces a
-  decoder that reaches EOF cleanly and still satisfies every label target, but
-  the observed distinct-opcode count inflates from **51 to all 256** and 154
-  dialogue strings fail the oracle. The inflated opcode count is the signal.
+- 证据等级：`derived`
+- 跳转操作数按大端解释时都落在文件范围内的指令边界上；按小端解释得到的值远超文件大小。
 
-### EV_STR_OPCODES — NUL-terminated string operands
-- Evidence level: `observed`
-- `0x33 PUSHS` — identifiers: filenames, config paths, speaker names (77,890)
-- `0x0A PUSHM` — message text (47,929)
-- Two separate string opcodes, not one. `0x0A` is the dialogue carrier.
+## 指令编码
 
-### Single-byte opcodes
-Every other value, no operand. Only **51 distinct opcodes** occur across 9.6 MB
-once `0x19` is handled correctly. Their individual semantics are not modelled
-(that would be T4) and are rendered as `.op 0xNN`; they are preserved verbatim,
-which is sufficient for byte-exact rebuild.
+单字节 opcode，三种长度类型。
 
-### EV_SYSCALL_DISPATCH — syscall
-- Evidence level: `derived`
-- Opcode `0x18`; the id is the operand of the immediately preceding `0x32`
-  (98.1% of 166,134 sites). 21 distinct ids observed.
+### EV_PUSH_IMM / EV_JUMP_TARGETS / EV_OP19_WIDTH —— 5 字节指令
 
-## Syscall roles
+- `0x32 PUSH imm32`、`0x14 JMP`、`0x15 CALL`、`0x19`
+- 证据等级：`0x32` 为 `observed`，其余为 `derived`
+- **`EV_OP19_WIDTH` 值得单独记录，因为它漏掉之后是静默的**：把 `0x19` 当 1 字节指令，
+  解码器依然能干净地走到 EOF，依然满足全部标签对齐，
+  但观测到的不同 opcode 数会从 **51 膨胀到全部 256**，且有 154 条对话字符串通不过哈希校验。
+  **opcode 数量膨胀就是那个信号。**
 
-### EV_MSG_SYSCALL — id 0x16 is message display
-- Evidence level: `derived`
-- Message groups are terminated by syscall `0x16` in 14,143 of 14,145 sampled
-  cases. Near-total exclusivity in both directions. See EV_MESSAGE_JOIN for how
-  a group spans several strings.
+### EV_STR_OPCODES —— NUL 结尾字符串操作数
 
-### EV_NAME_SYSCALL / EV_NAME_BRACKET — speaker names
-- Evidence level: `observed`
-- Names are `0x33` strings delimited `【...】`, pushed for syscall `0x1D`, and
-  bind to the next `0x0A` message. Verified by reading the resulting
-  name/dialogue alternation as coherent conversation across several files.
-- Binding method is structural (bracket + syscall group), not adjacency-only, so
-  it does not depend on argument order. Syscall `0x1D` also carries `.akb`
-  image filenames, so the bracket predicate is required to separate them; the
-  rule that matches names is declared *before* the filename rules so it cannot
-  be shadowed.
+- 证据等级：`observed`
+- `0x33 PUSHS` —— 标识符：文件名、配置路径、说话者名（77,890 条）
+- `0x0A PUSHM` —— 消息正文（47,929 条）
+- 是**两个**独立的字符串 opcode，不是一个。`0x0A` 才是对话载体。
+- 另见 EV_VARIANT_0B：作品「1」用 `0x0B` 承载对话。
 
-### EV_ASSET_SYSCALLS / EV_CONFIG_SYSCALL — non-text strings
-- Evidence level: `derived`
-- `0x12` voice `.ogg`, `0x1B`/`0x13` image `.akb`, `0x10` sound `.wav`,
-  `0x17` video `.vsd`, `0x15` script `.mes`, `0x19`/`0x0F` `/Config/...` keys.
-- All are tagged `label` / `frozen`: exported so a translator can see them, but
-  rejected if modified.
+### 单字节 opcode
+
+其余所有值，无操作数。它们各自的语义**未建模**（那属于 T4），渲染为 `.op 0xNN`，
+逐字节原样保留——这对逐字节重建已经足够。
+
+实测不同 opcode 数（`0x19` 与 `0x1B` 均已正确处理后）：
+
+| 范围 | fuyukuru | 作品「1」 |
+|---|---|---|
+| 剧本 `.MES`（不含 `_SAMPLE`） | 30 | 34 |
+| 全语料（含 `LIBLARY.LIB` 与 `_SAMPLE.MES`） | 84 | 79 |
+
+差距来自 `LIBLARY.LIB`：它是库文件，指令种类比剧本丰富得多。
+下文用作方言判据的数字一律取**全语料**口径（84 / 79），与 `check_variants.py` 一致。
+
+### EV_SYSCALL_DISPATCH —— 系统调用
+
+- 证据等级：`derived`
+- opcode `0x18`，功能号取自紧邻其前的那条 `0x32` 的操作数（166,134 个站点中占 98.1%）。
+  观测到 21 个不同功能号。
+
+## 系统调用的角色
+
+### EV_MSG_SYSCALL —— 功能号 0x16 是消息显示
+
+- 证据等级：`derived`
+- 抽样文件中 14,145 个消息组有 14,143 个由功能号 `0x16` 终结，双向近乎排他。
+  一个消息组如何跨多个字符串见 EV_MESSAGE_JOIN。
+
+### EV_NAME_SYSCALL / EV_NAME_BRACKET —— 说话者名
+
+- 证据等级：`observed`
+- 人名是 `0x33` 字符串，以 `【...】` 包裹，为功能号 `0x1D` 压栈，
+  绑定到其后的第一条消息。验证方式：读出来的人名/对话交替序列构成连贯对话。
+- 绑定依据是结构性的（方括号 + 功能号分组），不是仅靠相邻，
+  因此参数顺序变化时不会张冠李戴。
+- 功能号 `0x1D` **同时**承载 `.akb` 立绘文件名，所以方括号谓词是必需的；
+  匹配人名的规则**声明在文件名规则之前**，否则会被后者遮蔽。
+
+### EV_ASSET_SYSCALLS / EV_CONFIG_SYSCALL —— 非文本字符串
+
+- 证据等级：`derived`
+- `0x12` 语音 `.ogg`、`0x1B`/`0x13` 图像 `.akb`、`0x10` 音效 `.wav`、
+  `0x17` 视频 `.vsd`、`0x15` 脚本 `.mes`、`0x19`/`0x0F` `/Config/...` 配置键。
+- 全部标记 `label` / `frozen`：**照常导出**（让译者能看见全部条目，才能发现漏译），
+  但被修改时拒绝。
 
 ### EV_ASSET_EXTENSIONS / EV_TRANSITION_CODES / EV_ASCII_TOKENS
-- Evidence level: `inferred` (`tag_source=heuristic`)
-- Some asset strings are pushed with no syscall inside the window. They are
-  classified by appearance: known extension, the 4 transition codes
-  (`fi` `fo` `wi` `wo`), or pure ASCII. Appearance rules are used **only** to
-  subdivide strings already proven to be string operands, never to discover
-  text, and their verdicts are marked `inferred`.
 
-### EV_SHAPE_MSG_IN_0X33 — shape variant
-- Evidence level: `inferred`, individually confirmed against the oracle
-- 9 dialogue lines are stored uncompressed in `0x33` with no consuming syscall
-  in the window. Confirmed as real dialogue because their bytes hash-match the
-  oracle. Handled as an explicit declared shape rather than by widening the
-  window, so the other 125,828 entries keep their existing classification.
+- 证据等级：`inferred`（`tag_source=heuristic`）
+- 部分资源字符串压栈后窗口内没有消费它的系统调用。这些按外观分类：已知扩展名、
+  4 个转场码（`fi` `fo` `wi` `wo`）、或纯 ASCII。
+- **外观规则只用于细分已被证明是字符串操作数的条目，绝不用于发现文本**，
+  且结论一律标记 `inferred`。
 
-## EV_KANA_TABLE — the substitution table
+### EV_MSG_UNANCHORED —— 窗口外的对话
 
-The non-obvious part of the format, and the reason a naive cp932 decode yields
-garbage.
+- 证据等级：`inferred`（`tag_source=heuristic`）
+- 少量对话的消费系统调用落在前瞻窗口之外（fuyukuru 23 条、作品「1」160 条），
+  因此 `syscall_id` 为 `None`。逐条阅读确认是真对话，fuyukuru 的那些还通过了哈希预言机。
+- 这些条目由一条**后备规则**接管：要求它是消息 opcode 且含至少一个双字节字符
+  （`contains_script`）。不用长度过滤——真对话里有 `……？` 这种 2 字符的行。
+- **这条后备规则曾经是个陷阱**：它一度把选项文本也吸收成了 `msg`，
+  让 `choice` 计数为 0 而无人发觉（见 EV_CHOICE_BLOCK）。
+  因此它必须声明在 `choice` 规则**之后**，且新增结构时要重新检查它有没有多吞东西。
 
-Inside string operands, bytes `0x01..0x53` are **not** cp932. They are
-single-byte codes for hiragana:
+### EV_SHAPE_MSG_IN_0X33 —— 形态变体
+
+- 证据等级：`inferred`，逐条经哈希预言机确认
+- 有 9 条对话未压缩地存在 `0x33` 里，窗口内没有消费它的系统调用。
+  确认为真对话的依据是它们的字节能命中哈希预言机。
+- 处理方式是**显式声明一个形态**，而不是放宽窗口——
+  后者会让其余 107,881 条条目的分类跟着变。
+
+## EV_CHOICE_BLOCK —— 玩家选项，opcode 0x1B
+
+- 证据等级：`observed`
+- 玩家可见选项的注册形式：
 
 ```
-char = chr(0x3040 + code)        # 0x02 -> あ, 0x04 -> い, 0x0B -> か, 0x53 -> ん
+1B <u32 大端 代码偏移>   <消息字符串>   00
 ```
 
-Tokenisation: cp932 lead bytes (`0x81-0x9F`, `0xE0-0xEF`) consume two bytes and
-are literal; `0x01..0x53` expand via the rule above; everything else is literal.
+  操作数是选中该项后跳转的分支地址，选项文本紧随其后，是一条消息字符串。
 
-**How it was derived, not guessed.** `chs.json` (sibling of the script folder) is
-a pre-existing third-party Chinese translation whose 33,231 keys are
-`sha1(original_japanese_cp932_bytes)`. That is an oracle: a candidate decoding
-is provably correct when its hash is a key.
+- **`0x1B` 是上下文相关的**：在库文件（`LIBLARY.LIB`）里同一个值是真正的无操作数 opcode。
+  只在操作数解析后落在文件范围内时才读作 5 字节——这是一个**可判定的测试，不是猜测**。
+  按此规则：fuyukuru 10 条选项、作品「1」52 条，**零个错位目标**；
+  `LIBLARY.LIB` 里的 2 个候选被拒，因为其操作数（0x3C320008）比文件大好几个数量级。
+- 把 `0x1B` 当 1 字节会让不同 opcode 数上升（fuyukuru 84→90，作品「1」80→126），
+  因为被吞掉的目标字节随后被当成指令解码了。
 
-1. 407 dialogue strings contain exactly one substitution code. For each, all
-   7,336 valid two-byte cp932 characters were substituted and hashed.
-2. 25 codes resolved uniquely this way (`0x02→あ`, `0x04→い`, `0x0B→か`,
-   `0x14→ご`, `0x2F→は`, `0x53→ん`, ...).
-3. All 25 fit `chr(0x3040 + code)` with **zero** exceptions. The fit was tested
-   against 14 candidate offsets; only `+0x3040` matched, and it matched 25/25.
+### 这一处最初为什么漏了
 
-Full-corpus result: **48,086 of 48,093** extracted engine lines hash-match the
-oracle (99.985%), across 30,146 merged messages. All 6 non-matching are repeated-filler test strings in
-`_SAMPLE.MES` (`あああ…`, `２２２…`), a developer file absent from the shipped
-translation; they decode correctly and were simply never translated.
+选项文本当时**确实出现在产出里**，但被 `message-unanchored` 兜底规则标成了 `msg`，
+而 `choice` 计数是 **0**。全部字节门禁通过。
 
-## EV_MESSAGE_JOIN — one sentence is stored as 1–3 strings
+这是 §0.1 那类失败第二次出现：**一条吸收未识别结构的兜底规则，
+恰好掩盖了「该结构尚未被识别」这件事**。修法是找到真正的锚点；
+防线是 `check_output_sanity.py` 里的 `EXPECTED_TAG_ZERO`——
+这个体量的语料抽不出任何选项时判定失败。
 
-- Evidence level: `observed`
-- A single spoken line is emitted as up to three consecutive `0x0A` strings
-  joined by the opcode pair `1C 00` (the engine's line-break instruction), with
-  one `0x16` syscall for the whole group.
-- All **17,947** separators in the corpus are exactly `1C 00`, with no variants,
-  and group sizes are only 1 (17,527), 2 (7,271) or 3 (5,338).
-- Consequence: the 48,093 raw dialogue strings are really **30,146 messages**.
-  Extracting them as separate entries splits sentences mid-clause — an opening
-  `「` in one entry and its closing `」` two entries later — which makes the text
-  unusable for a translator who needs to see the whole utterance.
+交叉验证：
 
-The parts are therefore merged into one editable entry, with `\n` marking each
-engine line break and `lines=N` in the comment. Two measured properties make
-this safe:
+- fuyukuru 的 10 条选项与公开攻略页**完全对应**（5 个存档点 × 2 项），
+  含 `我慢なんかしてません。` 与 `気持ち悪くなんかないよ。`
+- 10 条**全部命中**独立译文库的哈希，确认是真实可翻译文本而非误解析的字节。
+- 变长回封时选项目标会被重定位，并验证仍指向**同一条逻辑指令**（按序号比对），
+  而不只是落在某个合法边界上。漏掉这点会让分支悄悄跳错，而文件照样能加载。
 
-| Property | Measurement | Why it matters |
+## EV_KANA_TABLE —— 假名替换码表
+
+本格式最不显然的部分，也是直接按 cp932 解码只能得到乱码的原因。
+
+字符串操作数内部，字节 `0x01..0x53` **不是** cp932，而是平假名的单字节码：
+
+```
+字符 = chr(0x3040 + 码值)        # 0x02 -> あ, 0x04 -> い, 0x0B -> か, 0x53 -> ん
+```
+
+切分规则：cp932 前导字节（`0x81-0x9F`、`0xE0-0xEF`）吃 2 字节且原样保留；
+`0x01..0x53` 按上式展开；其余字节原样保留。
+
+**它是解出来的，不是猜的。** `chs.json`（脚本目录的同级文件）是一份既有的第三方汉化译文库，
+33,231 个 key 是**原文 cp932 字节的 sha1**。这构成一个预言机：
+候选解码的哈希命中 key，即可判定其正确。
+
+1. 有 407 条对话只含一个替换码。对每条，把全部 7,336 个合法双字节 cp932 字符代入并哈希。
+2. 以此方式**唯一确定** 25 个码（`0x02→あ`、`0x04→い`、`0x0B→か`、
+   `0x14→ご`、`0x2F→は`、`0x53→ん` ……）。
+3. 25 个**全部**符合 `chr(0x3040 + 码值)`，**零例外**。共测了 14 个候选偏移，
+   只有 `+0x3040` 匹配，且是 25/25。
+
+全语料结果：抽出的消息中 **48,086 / 48,093 行**命中预言机（99.985%）。
+未命中的 7 条：6 条是 `_SAMPLE.MES` 里的重复填充测试串（`あああ…`、`２２２…`），
+该文件是开发用文件、汉化版未收录，解码本身是正确的；
+1 条是 `LIBLARY.LIB` 的伪条目（见 EV_VARIANT_0B 末尾）。
+
+### EV_KANA_SCOPE —— 码表只作用于 0x0A
+
+- 证据等级：`observed`
+- **实测得出，不是假设**：77,689 条 `0x33` 字符串中，需要展开才能命中预言机的有 **0 条**
+  （命中的 17,371 条，展开与否都一样命中）；而 47,928 条 `0x0A` 中有 46,107 条含码。
+- 对 `0x33` 做展开会破坏文件名：`black.akb` 变成 `black<の>akb`，
+  因为那里的 `0x2E` 是字面的 `.` 而不是 `の` 的码。
+- 这是第一版实现里的真实 bug，靠**检视产出**发现的，
+  而哈希校验和覆盖率检查都看不见它。
+
+## EV_MESSAGE_JOIN —— 一句话存成 1~3 个字符串
+
+- 证据等级：`observed`
+- 一句台词最多由 3 个连续的消息字符串组成，中间以 opcode 对 `1C 00`
+  （引擎的换行指令）连接，整组共用一个 `0x16` 系统调用。
+- fuyukuru 的 **17,947 个**分隔符**全是** `1C 00`，无任何变体。组大小只有 1、2、3：
+
+| 语料 | 1 行 | 2 行 | 3 行 | 合并后条目 | 底层字符串 | 分隔符 |
+|---|---|---|---|---|---|---|
+| fuyukuru | 17,528 | 7,271 | 5,338 | 30,137 | 48,084 | 17,947 |
+| 作品「1」 | 35,156 | 4,470 | 407 | 40,033 | 45,317 | 5,284 |
+
+- 后果：fuyukuru 的 48,084 条原始对话字符串其实是 **30,137 条消息**。
+  逐条导出会把句子拦腰截断——开引号 `「` 在一条、闭引号 `」` 在两条之后，
+  译者看不到完整语句。
+- 两部作品的换行率差别很大（fuyukuru 42% 的消息跨行，作品「1」只有 12%），
+  但分隔符形态完全一致，所以同一套逻辑通用。
+
+因此各部分被合并成一条可编辑条目，用 `\n` 标记引擎换行，注释里给 `lines=N`。
+合并安全的两个前提都是实测的：
+
+| 性质 | 实测 | 意义 |
 |---|---|---|
-| No jump targets a non-first part | 0 of 12,609 groups | merging cannot break control flow |
-| No dialogue contains a literal `\` | 0 of 48,083 strings | the `\n` escape is unambiguous |
+| 无跳转指向非首个部分 | 12,609 组中 0 例 | 合并不会破坏控制流 |
+| 对话中无字面反斜杠 | 48,083 条中 0 例 | `\n` 转义无歧义 |
 
-On repack the entry is split back on `\n` and **each part is written to its own
-original site**, so the stored layout is unchanged. The line count is fixed by
-the engine (each line is a separate string operand), so changing the number of
-`\n` is rejected in both directions rather than silently reflowed — adding or
-removing a line would mean inserting or deleting instructions, a full-layout
-operation.
+回封时按 `\n` 拆回，**每部分写回它自己原本的站点**，存储布局不变。
+行数由引擎固定（每行是独立的字符串操作数），所以改变 `\n` 数量会被双向拒绝，
+而不是静默重排——增删一行等于增删指令，属于 full-layout 操作。
 
-Note the oracle keys each engine line **separately** (12,609 of 12,609 groups
-match per part; only 1 matches in joined form). That is why merging is a
-presentation decision at the text-file layer only, and the oracle gate checks
-part by part.
+注意预言机是**按单行**存 key 的（12,609 组中 12,609 组按部分命中，合并形式只有 1 组命中）。
+所以合并只是文本文件这一层的呈现决定，预言机门禁仍逐行校验。
 
-## EV_CHOICE_BLOCK — player choices, opcode 0x1B
+## EV_VARIANT_0B —— 第二部作品，第二个对话 opcode
 
-- Evidence level: `observed`
-- A player-visible choice is registered as:
+- 证据等级：`observed`
+- 第二份语料（作品「1」，241 个文件）是**同一引擎**：头部布局相同、代码起点算法相同、
+  开头指令字节相同、5 字节操作数集合相同。按 SKILL.md §7.5 属于 **L2 形态变体**，
+  不是新的 profile。
+- 差异：对话由 opcode **`0x0B`** 承载，且字符串是**纯 cp932，不使用假名码表**
+  （10 个零散单字节，对比压缩变体的 80 个）。
+- **搞错这一点在字节门禁上完全隐形**：用 fuyukuru 的方言解析那份语料，
+  241 个文件依然 `byte_coverage=1.0`、往返逐字节一致，
+  但**正文只抽出 114 条，而人名有 25,064 条**——正是 SKILL.md §0 描述的事故特征。
+  只有 `check_output_sanity.py` 和 `check_variants.py` 能发现，别的都不行。
 
-```
-1B <u32 BE code offset>   <message string>   00
-```
+### 方言选择
 
-  The operand is the branch taken when that option is picked; the option text
-  immediately follows as a message string.
+**只用结构探测，绝不看文件名或目录名**（§7.5.2）。每个候选把整个文件解码一遍，
+胜者是**不同 opcode 数最少**的那个——因为失步的解码会穿行于文本之中，
+凭空造出真实指令集里不存在的 opcode。实测区分度：
 
-- **0x1B is context-dependent.** In library files (`LIBLARY.LIB`) the same value
-  occurs as a genuine no-operand opcode. It is read as 5 bytes only when the
-  operand resolves inside the file — a decidable test, not a preference. With
-  that rule: 10 choices in fuyukuru and 52 in title "1", with **zero misaligned
-  targets**; the 2 candidates in `LIBLARY.LIB` are rejected because their
-  operands (0x3C320008) exceed the file size by orders of magnitude.
-
-- Treating `0x1B` as 1 byte inflates the distinct-opcode count (84 → 90 in
-  fuyukuru, 80 → 126 in title "1") because the swallowed target bytes are then
-  decoded as instructions.
-
-### Why this was missed at first
-
-The choice text still appeared in the output, but tagged `msg` by the
-`message-unanchored` fallback rule, with `choice` count **zero**. Every byte
-gate passed. This is the §0.1 failure mode a second time: a fallback rule that
-absorbs unrecognised structure hides the fact that the structure is
-unrecognised. The fix was to identify the real anchor; the guard is
-`EXPECTED_TAG_ZERO` in `check_output_sanity.py`, which now fails when a corpus
-this size yields no choices at all.
-
-Cross-checks:
-- The 10 fuyukuru choices match the published walkthrough exactly (5 save points
-  × 2 options), including `我慢なんかしてません。` and `気持ち悪くなんかないよ。`
-- All 10 hash-match the independent translation database, confirming they are
-  real translatable strings and not misparsed bytes.
-- Choice targets are relocated on variable-length repack and verified to point at
-  the same *logical instruction* (by ordinal), not merely at some valid
-  boundary. Missing this would silently reroute a branch in a still-loadable
-  file.
-
-### EV_KANA_SCOPE — the table applies only to 0x0A
-- Evidence level: `observed`
-- Measured, not assumed: **0** of 77,689 `0x33` strings need expansion to match
-  the oracle (the 17,371 that match, match identically either way), while
-  46,107 of 47,928 `0x0A` strings contain codes.
-- Expanding `0x33` corrupts filenames: `black.akb` becomes `black<の>akb`,
-  because `0x2E` there is a literal `.`, not a code for `の`. This was an actual
-  bug in the first draft, caught by inspecting output rather than by any hash or
-  coverage check — neither of which can see it.
-
-## Repack
-
-No stored offset points at a string body; string operands are positional in the
-instruction stream. So a length change requires relocating exactly three classes
-of stored offset, all code-relative:
-
-1. header label table
-2. header entry table
-3. `JMP` / `CALL` operands
-
-`apply_edits()` builds one old→new offset map from the re-emitted stream and
-applies it **by site**. Values are never matched: a `PUSH` constant that happens
-to equal an old code offset must remain untouched. `FK029.MES` contains exactly
-one such collision (`PUSH 0x80` at `0x72FF`); after a +230-byte repack it is
-unchanged while 216 genuine jump sites relocated. `scripts/check_sites.py`
-enforces this and fails on a forged value-matched rewrite.
-
-Strategy is chosen by probe, minimum capability first, and a failed `run` never
-falls back to another strategy.
-
-| Situation | Strategy | Verified |
+| 语料 | 正确方言 | 错误方言 |
 |---|---|---|
-| no edits | `identity` | 59/59 byte-identical |
-| edits fit original slots | `in_place` | −92 bytes, reparses |
-| edits exceed slots | `pointer-rewrite` | +230 bytes, reparses, all edits present |
-| instruction/data edited in asm | refused, needs T4 | refusal verified, no output written |
+| fuyukuru（59 文件） | **84** 个 opcode | 256 个（即全部字节值） |
+| 作品「1」（241 文件） | **80** 个 opcode | 243 个 |
+| 单个 S04-30.MES | **24** 个 opcode | 207 个 |
 
-## EV_VARIANT_0B — second title, second dialogue opcode
+注意错误方言**不会**触发标签不对齐（两个语料下都是 0 个文件失败）——
+这正是它危险的地方：字节层面一切正常，只有 opcode 数量暴涨这一个信号。
+表中「正确方言」列与上一节的全语料数字略有出入（作品「1」80 对 79），
+因为这里是强制单方言解码全部文件，而实际运行时有 7 个无对话文件被判给了另一个方言。
 
-- Evidence level: `observed`
-- A second corpus (`E:uyukuru_dl\SILKYSIMAGE`, 241 files) is the same
-  engine: identical header layout, identical code-start computation, identical
-  prologue bytes, identical 5-byte operand set. It is an **L2 variant** in the
-  sense of SKILL.md 7.5, not a new profile.
-- What differs: dialogue is carried by opcode **`0x0B`**, and the strings are
-  **plain cp932 with no kana substitution** (10 distinct stray single bytes,
-  versus 80 in the compressed variant).
-- Getting this wrong is silent in the byte gates. Parsing that corpus under the
-  fuyukuru variant gives `byte_coverage=1.0`, byte-identical roundtrip for all
-  241 files, and **114 dialogue lines against 25,064 names** — the exact
-  signature described in SKILL.md 0. `check_output_sanity.py` and
-  `check_variants.py` both catch it; nothing else does.
+cp932 前导字节占比最初被用作**选择依据**，结果在 0.12 阈值上把一个合法文件（0.1212）判死，
+而同一文件的 opcode 数是 33 对 207。因此它被降级为只对胜出者做一次兜底检查
+（`MAX_LEAD_BYTE_RATIO_ABSOLUTE`），用于捕捉「所有候选都失步」的情形。
 
-### Variant selection
+**当存在区分度大得多的信号时，不该让一个卡在阈值边缘的信号来做决定。**
 
-By structural probe only, never by file or folder name (7.5.2). Each candidate
-decodes the whole file; the winner is the one with the **fewest distinct
-opcodes**, because a desynchronised decode walks through text and invents
-opcodes that are not in the real instruction set. Measured separation:
+完全没有对话的文件（`LIBLARY.LIB`、`MAIN.MES`、`FLAGINI.MES` 等）在两个方言下评分完全相同，
+因为方言差异只体现在对话的存储方式上。这类平局无害，记录在 `variant_scores` 里；
+作品「1」中有 7 个这样的文件被判给 fuyukuru 方言。
 
-| Corpus | correct variant | wrong variant |
+残留两处伪条目，都在 `LIBLARY.LIB`，都标记为 `tag_source=heuristic` 而非确认对话：
+该文件中消息 opcode 的值同时是一个真正的无操作数 opcode，
+读作字符串会得到 1~2 个字符的碎片（`ひ`、`そひ`）。**70,190 条中占 2 条。**
+
+### 作品「1」的目标编码
+
+它的正文是中文，但**存在 cp932 的码位里**——这是字体 hack 汉化，
+配套的 `chs.ttf` 与 `FontHook.ini` 就是干这个的。
+所以它的 `target_encoding` 仍然是 `cp932`；只有 cp932 里没有码位的字会被拒绝，
+且导入器会报出具体是哪个字。
+
+## 回封
+
+没有任何存储的偏移指向字符串体，字符串操作数在指令流中是按位置定位的。
+因此长度变化只需重定位以下几类存储偏移，全部是相对代码起点的：
+
+1. 头部标签表
+2. 头部入口表
+3. `JMP` / `CALL` 操作数
+4. `0x1B` 选项分支目标（见 EV_CHOICE_BLOCK）
+
+`apply_edits()` 从重新生成的指令流建立一张旧→新偏移映射，**按站点应用**。
+绝不按值匹配：一个恰好等于旧代码偏移的 `PUSH` 常量必须保持不变。
+`FK029.MES` 里正好有一个这样的碰撞（`0x72FF` 处的 `PUSH 0x80`）：
++230 字节回封后它未被改动，而 216 个真正的跳转站点完成了重定位。
+`scripts/check_sites.py` 强制此项，并能识破伪造的按值改写。
+
+策略由 probe 协商，取能力最小的可用项；`run` 失败**绝不**自动降级到下一个策略。
+
+| 情形 | 策略 | 实测 |
 |---|---|---|
-| fuyukuru (59 files) | 51 opcodes | fails to decode |
-| title "1" (241 files) | 65 opcodes | 249 opcodes |
-| S04-30.MES alone | 33 opcodes | 207 opcodes |
+| 无编辑 | `identity` | 300/300 逐字节一致 |
+| 编辑后不超原槽容量 | `in_place` | −92 字节，可重新解析 |
+| 编辑后超出容量 | `pointer-rewrite` | +230 字节，可重新解析，全部编辑到位 |
+| asm 中改了指令或数据 | 拒绝，需 T4 | 拒绝行为已验证，不产出任何文件 |
 
-The cp932-lead-byte ratio was tried as a *selector* first and rejected a valid
-file at 0.1212 against a 0.12 cut, while the opcode counts for the same file were
-33 versus 207. It is therefore demoted to a sanity bound on the winner only
-(`MAX_LEAD_BYTE_RATIO_ABSOLUTE`), catching the case where every candidate is
-desynchronised. **A signal that decides a knife-edge should not be the primary
-discriminator when a far wider one is available.**
+## 已知边界与未决问题
 
-Files with no dialogue at all (`LIBLARY.LIB`, `MAIN.MES`, `FLAGINI.MES` and
-friends) score identically under both variants, since the variants differ only in
-how dialogue is stored. Those ties are harmless and recorded in
-`variant_scores`; 7 such files in title "1" resolve to the fuyukuru variant.
-
-Two residual artefacts, both in `LIBLARY.LIB` and both marked
-`tag_source=heuristic` rather than presented as confirmed dialogue: the message
-opcode value also occurs there as a genuine no-operand opcode, yielding a 1-2
-character fragment (`ひ`, `そひ`). 2 spurious entries out of 70,190.
-
-### Target encoding for title "1"
-
-Its text is Chinese but stored **inside cp932 codepoints** — a font-hack
-translation, which is what `chs.ttf` and `FontHook.ini` are for. So
-`target_encoding=cp932` is correct for it too; only characters with no cp932
-codepoint are rejected, and the importer names the offending character.
-
-## Known limits and open questions
-
-- The 51 single-byte opcodes are preserved but not individually named. Naming
-  them requires host disassembly of `fuyukuru.exe` and would be a T4 claim.
-- `0x19`'s semantics are unknown; only its 4-byte operand width is established.
-- The high 16 bits of some syscall ids are unexplained.
-- `full-layout` (inserting/deleting instructions) is not implemented.
-- Inline control bytes inside dialogue (`0x05` etc., ~31 distinct values) are
-  preserved byte-exactly as `{{XX}}` placeholders but their display semantics
-  (ruby, wait, colour) are not decoded.
-- Cross-sample validation now covers **two titles** (59 + 241 files, 300 total)
-  with different variants, plus one independent translation database for the
-  first. Both variants are exercised. There is no oracle for title "1" (it is
-  already a translated release), so its dialogue is validated structurally and
-  by reading, not by hash.
-- The `0x0B` variant's single-byte opcodes are unnamed, same as the other
-  variant's.
+- 全部单字节 opcode（剧本内 30~34 种，含库文件 79~84 种）原样保留但未逐一命名。
+  命名需要反汇编宿主 `fuyukuru.exe`，且属于 T4 申报。
+- `0x19` 的语义未知，只确认了它的 4 字节操作数宽度。
+- 部分系统调用功能号的高 16 位含义未确认。
+- 不支持 `full-layout`（增删指令、改变消息行数）。
+- 对话内嵌控制字节（`0x05` 等约 31 种）以 `{{XX}}` 占位符逐字节保留，
+  但其显示语义（注音、等待、颜色）未解码。
+- 跨样本验证已覆盖**两部作品**（59 + 241 = 300 个文件），使用不同方言，两个分支都被实际命中；
+  第一部另有一份独立译文库。作品「1」**没有**预言机（它本身已是汉化版），
+  其正文是靠结构与人工阅读确认的，不是靠哈希。
+- `0x0B` 变体的单字节 opcode 同样未命名。
