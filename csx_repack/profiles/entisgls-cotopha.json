@@ -1,0 +1,98 @@
+{
+  "id": "entisgls-cotopha",
+  "note": "EntisGLS / Cotopha 数据档。代码不含任何作品专属字面量，作品相关的事实全部写在这里。可自行增删条目以适配其它作品。",
+
+  "archive_keys": {
+    "note": "封包名（小写）-> 密码。取自宿主 exe 的 IDR_COTOMI 配置资源，即引擎自己读取的值。未列出的封包按未加密处理，也可在界面里手填密码。",
+    "keys": {
+      "data12.noa": "20140811VER22",
+      "data13.noa": "20140811VER23",
+      "data15.noa": "20140811VER25",
+      "data17.noa": "20140811VER27"
+    }
+  },
+
+  "call_slot_roles": {
+    "note": "调用名 -> 各参数槽位的文本角色。slots 按槽位序号给出角色；rest_from 起的所有槽位取 rest 的值（null 表示该槽为不可翻译的资源标识）。证据见 vm_analysis.md 的 EV_CALL_SLOTS。",
+    "calls": {
+      "WitchWizard::OutMsg": {
+        "slots": {"0": "name", "1": "msg"},
+        "rest_from": 2,
+        "rest": null,
+        "evidence": "逐形态统计：2 参数 17,019 次、3 参数 12,996 次、4/5/6 参数 29 次；槽 2 起为每个发声角色一个语音 ID"
+      },
+      "WitchWizard::ShowMessage": {"slots": {"0": "msg"}},
+      "MessageWindow::ShowMessage": {"slots": {"0": "msg"}},
+      "WitchWizard::AddMenuItem": {"slots": {"0": "choice"}},
+      "SelectMenu::AddMenuItem": {"slots": {"0": "choice"}},
+      "WitchWizard::MessageBox": {"slots": {"0": "system"}},
+
+      "WitchWizard::DoLayerBS": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::DoLayerFace": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::DoEndTransition": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::BeginTransition": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::ClearLayer": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LoadImage": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LoadLayerImage": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::ShowEventCG": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetSaveThumbnail": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionBegin": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionBegin2": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionWait": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionAddMove": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionAddZoom": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionAddAngle": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerMotionAddTransparency": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerLoadEmotion": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::GetLayerFileName": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::PlaySound": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::PlaySound@1": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::FlipScreen": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::ChangeScreen": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::CallEvent": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetCurrentScriptName": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetPastLabel": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetCurrentDescription": {"slots": {}, "rest_from": 0, "rest": null},
+      "MetaComplextImage::LoadMetaInfo": {"slots": {}, "rest_from": 0, "rest": null},
+      "ScreenManager::SetBGList": {"slots": {}, "rest_from": 0, "rest": null},
+      "TelopData::BeginTelop": {"slots": {}, "rest_from": 0, "rest": null},
+      "OutDebug": {"slots": {}, "rest_from": 0, "rest": null},
+
+      "WitchWizard::SetFaceImage": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::ChangeBustshot": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::MoveBustshot": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::AddBustshotEmotion": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetBSVirtualAnimation": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetBSVirtualCurveAnimation": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::SetBSVirtualWalkAnimation": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::GetSafeBSPosition3D": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::AddScriptMemoryPoint": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::AddScriptPickupPoint": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::EffectDuration": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::OpenMovie": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::Lock": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::AdjustLayerCenter": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerSetPosition": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerSetZoom": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerSetAngle": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerSetTransparency": {"slots": {}, "rest_from": 0, "rest": null},
+      "WitchWizard::LayerApplyParameter": {"slots": {}, "rest_from": 0, "rest": null},
+      "effectEyeCatch": {"slots": {}, "rest_from": 0, "rest": null},
+      "effectDateEyeCatch": {"slots": {}, "rest_from": 0, "rest": null},
+      "MakeRandom": {"slots": {}, "rest_from": 0, "rest": null},
+      "ScreenManager::LoadImage": {"slots": {}, "rest_from": 0, "rest": null},
+      "SoundManager::PlaySound": {"slots": {}, "rest_from": 0, "rest": null},
+      "ComplexImageManager::LoadImageInfo": {"slots": {}, "rest_from": 0, "rest": null},
+      "ComplexLayer::AddMotionMove": {"slots": {}, "rest_from": 0, "rest": null},
+      "MessageWindow::SetFaceImage": {"slots": {}, "rest_from": 0, "rest": null},
+      "UITitle::PlayBGM": {"slots": {}, "rest_from": 0, "rest": null},
+      "SelectMenu::MakeMenuSprite": {"slots": {}, "rest_from": 0, "rest": null},
+      "Suspend": {"slots": {}, "rest_from": 0, "rest": null},
+      "AlbumViewMenuPopup::IsEnabled": {"slots": {}, "rest_from": 0, "rest": null},
+      "Config::PlaySystemSE": {"slots": {}, "rest_from": 0, "rest": null}
+    },
+    "not_declared": {
+      "MessageWindow::SetNameString": "本样本中仅调用一次且传空串（引擎用它清空名字栏）。声明为 name 槽会形成一个永不产出文本的形态声明，故不声明。"
+    }
+  }
+}
